@@ -1,25 +1,31 @@
 package service
 
+import SnapSerde.snapSerde
 import domain.GameSnap
-import service.BrokerConf.BROKER
-import zio.{ZIO, ZLayer}
-import zio.kafka.producer.{Producer, ProducerSettings}
-import zio.kafka.serde.Serde
-import zio.json._
+import org.apache.kafka.clients.producer.ProducerRecord
+import zio._
+import zio.config.typesafe.TypesafeConfigProvider
+import zio.kafka.producer._
+import zio.kafka.serde._
+import zio.stream.ZStream
 
-object SnapProducer {
+object SnapProducer extends ZIOAppDefault {
 
-  private val snapSerde: Serde[Any, GameSnap] =
-    Serde.string.inmapM(string =>
-      ZIO
-        .fromEither(string.fromJson[GameSnap])
-        .mapError(msg => new RuntimeException(msg))
-    )(nextSnap => ZIO.from(nextSnap.toJson))
+  override val bootstrap: ZLayer[Any, Nothing, Unit] =
+    Runtime.setConfigProvider(TypesafeConfigProvider.fromResourcePath())
 
-  val snapProducer: Unit =
-    ZLayer.scoped {
-      Producer.produceAll(Serde.string, snapSerde)
-      Producer.make(ProducerSettings(List(BROKER)))
-    }
+  override def run: ZIO[ZIOAppArgs with Scope, Any, Unit] = for {
+    broker    <- ZIO.config(Config.string("broker-host-port"))
+    snapTopic <- ZIO.config(Config.string("broker-snap-topic"))
+    streamWriter = ZLayer.scoped(Producer.make(ProducerSettings(List(broker))))
+    stream <- ZStream
+      .repeatZIO(Clock.currentDateTime)
+      .schedule(Schedule.spaced(3.second))
+      .map(time => new ProducerRecord(snapTopic, time.getMinute.toString, GameSnap.empty))
+      .via(Producer.produceAll(Serde.string, snapSerde))
+      .drain
+      .runDrain
+      .provide(streamWriter)
+  } yield stream
 
 }

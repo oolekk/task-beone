@@ -1,5 +1,6 @@
 package util
 
+import domain.GameSnap.Error._
 import domain.GameSnap._
 import domain._
 

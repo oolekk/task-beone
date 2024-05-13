@@ -2,7 +2,7 @@ package domain
 
 import zio.json._
 
-case class CmdAck(gameId: String, roundId: String, cmd: Either[String, BoardCmd])
+case class CmdAck(gameId: String, roundId: Long, cmd: Either[String, Long])
 
 object CmdAck {
   implicit val encoder: JsonEncoder[CmdAck] = DeriveJsonEncoder.gen[CmdAck]

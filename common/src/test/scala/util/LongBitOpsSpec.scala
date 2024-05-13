@@ -11,24 +11,44 @@ object LongBitOpsSpec extends ZIOSpecDefault {
     Gen.listOfN(count)(genIdx)
 
   def spec: Spec[Any, Nothing] = suite("LongBitUtilTest")(
-    test("for any long value fromString reconstitutes same long from bitString") {
+    test("for any long value fromBitStr reconstitutes same long as encoded to bitString") {
       check(Gen.long) { long =>
         val bitStr = long.bitString
         assertTrue(
-          fromString(bitStr).contains(long),
-          fromString("0" * 64).contains(0L),
-          fromString("1" * 64).contains(-1L)
+          fromBitStr(bitStr).contains(long),
+          fromBitStr("0" * 64).contains(0L),
+          fromBitStr("1" * 64).contains(-1L)
+        )
+      }
+    },
+    test("for any long value fromHexStr reconstitutes same long as earlier encoded by hexString") {
+      check(Gen.long) { long =>
+        val hexStr = long.hexString
+        assertTrue(
+          fromHexStr(hexStr).contains(long),
+          fromHexStr("0" * 16).contains(0L),
+          fromHexStr("f" * 16).contains(-1L)
+        )
+      }
+    },
+    test("for any long value fromBitStr reconstitutes same long as earlier encoded by bitString") {
+      check(Gen.long) { long =>
+        val bitStr = long.bitString
+        assertTrue(
+          fromBitStr(bitStr).contains(long),
+          fromBitStr("0" * 64).contains(0L),
+          fromBitStr("1" * 64).contains(-1L)
         )
       }
     },
     test("fromString of all bits zero is zero") {
-      assertTrue(LongBitOps.fromString("0" * 64).contains(0L))
+      assertTrue(LongBitOps.fromBitStr("0" * 64).contains(0L))
     },
     test("fromString of only first bit pos is one") {
-      assertTrue(LongBitOps.fromString("0" * 63 + "1").contains(1L))
+      assertTrue(LongBitOps.fromBitStr("0" * 63 + "1").contains(1L))
     },
     test("fromString of all bits pos is minus one") {
-      assertTrue(LongBitOps.fromString("1" * 64).contains(-1L))
+      assertTrue(LongBitOps.fromBitStr("1" * 64).contains(-1L))
     },
     test("setBitTo1 sets bit by index") {
       check(genIdx) { idx =>
@@ -77,7 +97,7 @@ object LongBitOpsSpec extends ZIOSpecDefault {
     test("getBit retrieves bit by index as 0 or 1 int") {
       val bits = (1 to 64).map(_ => scala.util.Random.nextInt(2))
       val str  = bits.mkString.reverse
-      val long = LongBitOps.fromString(str).get
+      val long = LongBitOps.fromBitStr(str).get
       assertTrue(
         bits.zipWithIndex.forall { case (bit, index) => bit == long.getBit(index) }
       )
@@ -85,13 +105,12 @@ object LongBitOpsSpec extends ZIOSpecDefault {
     test("getBool retrieves bit by index as true or false") {
       val bools = (1 to 64).map(_ => scala.util.Random.nextBoolean())
       val str   = bools.map(if (_) "1" else "0").mkString.reverse
-      val long  = LongBitOps.fromString(str).get
+      val long  = LongBitOps.fromBitStr(str).get
       assertTrue(
         bools.zipWithIndex.forall { case (bool, index) => bool == long.getBool(index) }
       )
     },
     test("bitString collects sign-bit first followed by most-to-least significant bit into string from left-to-right") {
-
       assertTrue(
         0L.bitString == ("0" * 64),
         1L.bitString == ("0" * 63) + 1,
@@ -107,7 +126,6 @@ object LongBitOpsSpec extends ZIOSpecDefault {
         (-2L).bitString == ("1" * 62) + "10",
         (-1L).bitString == "1" * 64
       )
-
     },
     test("bitString lexicographic order follows the bitwise order") {
       assertTrue(
@@ -121,6 +139,37 @@ object LongBitOpsSpec extends ZIOSpecDefault {
         Long.MaxValue.bitString > (Long.MaxValue - 1).bitString,
         2L.bitString > 1L.bitString,
         1L.bitString > 0L.bitString
+      )
+    },
+    test("hexString collects sign-bit first followed by most-to-least significant bit into string from left-to-right") {
+      assertTrue(
+        0L.hexString == ("0" * 16),
+        1L.hexString == ("0" * 15) + 1,
+        2L.hexString == ("0" * 15) + "2",
+        3L.hexString == ("0" * 15) + "3",
+        (Long.MaxValue - 1).hexString == "7" + ("f" * 14) + "e",
+        Long.MaxValue.hexString == "7" + ("f" * 15),
+        // bitwise, negative numbers are greater than positive numbers
+        // due to the sign bit, but follow the arithmetic order otherwise
+        Long.MinValue.hexString == "8" + ("0" * 15),
+        (Long.MinValue + 1).hexString == "8" + ("0" * 14) + "1",
+        (-3L).hexString == ("f" * 15) + "d",
+        (-2L).hexString == ("f" * 15) + "e",
+        (-1L).hexString == "f" * 16
+      )
+    },
+    test("hexString lexicographic order follows the bitwise order") {
+      assertTrue(
+        // negative numbers are greater than positive numbers bitwise
+        // due to the sign bit, but follow the arithmetic order otherwise
+        (-1L).hexString > (-2L).hexString,
+        (Long.MinValue + 1).hexString > Long.MinValue.hexString,
+        Long.MinValue.hexString > Long.MaxValue.hexString,
+        // positive numbers are smaller than negative numbers bitwise
+        // due to the sign bit, but follow the arithmetic order otherwise
+        Long.MaxValue.hexString > (Long.MaxValue - 1).hexString,
+        2L.hexString > 1L.hexString,
+        1L.hexString > 0L.hexString
       )
     }
   )

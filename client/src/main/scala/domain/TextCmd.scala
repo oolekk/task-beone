@@ -1,6 +1,6 @@
 package domain
 
-import domain.GameSnap.XY_OUT_OF_RANGE_MSG
+import domain.GameSnap.Error.XY_OUT_OF_RANGE_MSG
 
 object TextCmd {
 
@@ -11,28 +11,32 @@ object TextCmd {
   sealed trait TextCmd
   sealed trait Update // mark commands which update the game board
 
-  case object Exit extends TextCmd
-  case object Noop extends TextCmd
-  case object Rand extends TextCmd
-  case object Info extends TextCmd // show game info
+  case object Rand                     extends TextCmd
+  case object Noop                     extends TextCmd
+  case object Exit                     extends TextCmd
+  case object Save                     extends TextCmd
+  case class Load(gameId: String = "") extends TextCmd
+  case object GameInfo                 extends TextCmd
+  case class PieceInfo(id: Int)        extends TextCmd
+  case class FieldInfo(at: (Int, Int)) extends TextCmd
 
-  case class Play(gameId: String = "") extends TextCmd
-  case class Gone(field: (Int, Int))   extends TextCmd
-
-  case class AddRook(at: (Int, Int))   extends TextCmd with Update
-  case class AddBishop(at: (Int, Int)) extends TextCmd with Update
-  case class Take(from: (Int, Int))    extends TextCmd with Update
-
+  case class Take(from: (Int, Int))                 extends TextCmd with Update
+  case class AddRook(at: (Int, Int))                extends TextCmd with Update
+  case class AddBishop(at: (Int, Int))              extends TextCmd with Update
   case class Move(from: (Int, Int), to: (Int, Int)) extends TextCmd with Update
 
   def applyToGame(cmd: TextCmd, game: Game): Either[String, Game] = cmd match {
     case c: Update    => applyUpdate(c, game)
-    case Play(gameId) => restoreGame(gameId)
+    case Load(gameId) => loadGame(gameId)
+    case Save         => saveGame(game.id, game.round)
     case _            => Right(game)
   }
 
-  def restoreGame(gameId: String): Either[String, Game] = {
-    // should restore game if id exists, simplified for now
+  def loadGame(gameId: String): Either[String, Game] = {
+    Right(Game.empty(gameId))
+  }
+
+  def saveGame(gameId: String, gameRound: Long): Either[String, Game] = {
     Right(Game.empty(gameId))
   }
 
@@ -56,13 +60,11 @@ object TextCmd {
 
   def parse(text: String): Either[String, TextCmd] = {
     text.takeWhile(!_.isWhitespace).toLowerCase.trim match {
-      case _ if text.isBlank => Right(Noop)
-      case "info"            => Right(Info)
-      case "exit"            => Right(Exit)
-      case "rand"            => Right(Rand)
-      case "gone" | "last" =>
-        parseDigits(text, 2).map { case List(x, y) => Gone(x, y) }
-      case "play" => Right(Play(text.drop(4).trim))
+      case _ if text.isBlank              => Right(Noop)
+      case "exit"                         => Right(Exit)
+      case "rand"                         => Right(Rand)
+      case t @ "save" if (t == text.trim) => Right(Save)
+      case "load"                         => Right(Load(text.drop(4).trim))
       case "r" | "new rook" | "add rook" | "put rook" =>
         parseDigits(text, 2).map { case List(x, y) => AddRook(x, y) }
       case "b" | "new bishop" | "add bishop" | "put bishop" =>
@@ -71,6 +73,11 @@ object TextCmd {
         parseDigits(text, 4).map { case List(x1, y1, x2, y2) => Move((x1, y1), (x2, y2)) }
       case "t" | "take" | "d" | "delete" | "del" | "rm" | "remove" =>
         parseDigits(text, 2).map { case List(x, y) => Take(x, y) }
+      case t @ "info" =>
+        if (t == text.trim) Right(GameInfo)
+        else {
+          parseDigits(text, 1).map { case List(id) => PieceInfo(id) }
+        } orElse parseDigits(text, 2).map { case List(x, y) => FieldInfo(x, y) }
       case _ => Left(TextCmd.INVALID_COMMAND_MSG)
     }
   }

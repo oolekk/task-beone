@@ -1,12 +1,57 @@
 package domain
 
-import domain.GameSnap._
-import util.LongBitOps._
+import domain.GameSnap.Error._
 import zio.test._
 
 object GameSnapSpec extends ZIOSpecDefault {
 
+  import scala.util.Try
+  import domain.GameSnap._
+  import util.LongBitOps._
+
   def spec: Spec[Any, Nothing] = suite("GameSnapSpec")(
+    test("constructor must always succeed for non-overlapping set of rooks and bishops") {
+      assertTrue(
+        !(1 to 1000)
+          .map { _ =>
+            val rs      = scala.util.Random.nextLong()
+            val bs      = scala.util.Random.nextLong()
+            val overlap = bs & rs
+            Try {
+              GameSnap(rs & ~overlap, bs)
+              GameSnap(rs, bs & ~overlap)
+              GameSnap(rs & ~overlap, bs & ~overlap)
+            }
+          }
+          .exists(_.isFailure)
+      )
+    },
+    test("constructor must fail for overlapping set of rooks and bishops, succeed otherwise") {
+      // There will most likely be some overlap for randomly assigned set of rooks and bishops
+      // so this case is mostly for testing creation of such corrupt snaps won't succeed.
+      // On rare occasion it may be successful, but that case is better checked in dedicated test.
+      val trySnaps: Seq[(Boolean, Try[GameSnap])] = for {
+        _ <- (1 to 1000).toList
+        rs         = scala.util.Random.nextLong()
+        bs         = scala.util.Random.nextLong()
+        hasOverlap = (bs & rs) != 0
+      } yield (hasOverlap, Try { GameSnap(rs, bs) })
+      assertTrue(
+        trySnaps.forall {
+          case (hasOverlap, trySnap) => {
+            hasOverlap && trySnap.isFailure || !hasOverlap && trySnap.isSuccess
+          }
+        }
+      )
+    },
+    test("generator must produce non-corrupt game snaps") {
+      assertTrue(
+        !(1 to 1000)
+          .map(_ => GameSnap.gen())
+          // no corrupt snap with bishop and rook on the same field should be generated
+          .exists(snap => (snap.rooks & snap.bishops) != 0)
+      )
+    },
     test("rooks indicates fields with rooks via non-zero bit") {
       val (r1, b1, r2) = ((3, 5), (7, 7), (4, 6))
       val Right(snap) =
@@ -320,7 +365,7 @@ object GameSnapSpec extends ZIOSpecDefault {
     suite("rectLine returns set of points on horizontal or vertical line between two locations")(
       test("find nothing if points are not on same row or col") {
 
-        val notSameRowOrCol = fromString("""
+        val notSameRowOrCol = fromBitStr("""
           | 0 0 1 0 0 0 0 0
           | 0 1 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -335,7 +380,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find horizontal line as list of field indexes") {
 
-        val onSameRow = fromString("""
+        val onSameRow = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 1 0 0 0 1 0 0
           | 0 0 0 0 0 0 0 0
@@ -350,7 +395,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find full row horizontal line as list of field indexes") {
 
-        val onEdgesOfSameRow = fromString("""
+        val onEdgesOfSameRow = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -364,7 +409,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find vertical line as list of field indexes") {
 
-        val onVerticalLine = fromString("""
+        val onVerticalLine = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 1 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -379,7 +424,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find full column vertical line as list of field indexes") {
 
-        val onEdgesOfSameColumn = fromString("""
+        val onEdgesOfSameColumn = fromBitStr("""
           | 0 0 0 1 0 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -394,7 +439,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("only find line if there's exactly 2 points") {
 
-        val threePoints = fromString("""
+        val threePoints = fromBitStr("""
           | 0 0 0 0 1 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 1 0 0 0
@@ -405,7 +450,7 @@ object GameSnapSpec extends ZIOSpecDefault {
           | 0 0 0 0 0 0 0 0
         """.stripMargin.filterNot(_.isWhitespace).reverse)
 
-        val onePoint = fromString("""
+        val onePoint = fromBitStr("""
           | 0 0 0 0 0 0 0 1
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -426,7 +471,7 @@ object GameSnapSpec extends ZIOSpecDefault {
     suite("diagLine returns set of points on diagonal line between two locations")(
       test("find nothing if points are not on same diagonal") {
 
-        val notSameDiagonal = fromString("""
+        val notSameDiagonal = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 1 1 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -441,7 +486,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find \\-sloped line as list of field indexes") {
 
-        val onDiagonal = fromString("""
+        val onDiagonal = fromBitStr("""
           | 0 0 1 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -456,7 +501,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find \\ diagonal spanning edge-to-edge as list of field indexes") {
 
-        val edgeToEdge = fromString("""
+        val edgeToEdge = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -471,7 +516,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find the longest \\ diagonal as list of field indexes") {
 
-        val cornerToCorner = fromString("""
+        val cornerToCorner = fromBitStr("""
           | 1 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -486,7 +531,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find //-sloped diagonal as list of field indexes") {
 
-        val onDiagonal = fromString("""
+        val onDiagonal = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 1 0 0 0
@@ -501,7 +546,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find // diagonal spanning edge-to-edge as list of field indexes") {
 
-        val edgeToEdge = fromString("""
+        val edgeToEdge = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -516,7 +561,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("find the longest // diagonal as list of field indexes") {
 
-        val cornerToCorner = fromString("""
+        val cornerToCorner = fromBitStr("""
           | 0 0 0 0 0 0 0 1
           | 0 0 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0
@@ -531,7 +576,7 @@ object GameSnapSpec extends ZIOSpecDefault {
       },
       test("only find line if there's exactly 2 points") {
 
-        val threePoints = fromString("""
+        val threePoints = fromBitStr("""
           | 0 1 0 0 0 0 0 0
           | 0 0 1 0 0 0 0 0
           | 0 0 0 1 0 0 0 0
@@ -542,7 +587,7 @@ object GameSnapSpec extends ZIOSpecDefault {
           | 0 0 0 0 0 0 0 0
         """.stripMargin.filterNot(_.isWhitespace).reverse)
 
-        val onePoint = fromString("""
+        val onePoint = fromBitStr("""
           | 0 0 0 0 0 0 0 0
           | 0 1 0 0 0 0 0 0
           | 0 0 0 0 0 0 0 0

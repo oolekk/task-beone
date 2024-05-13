@@ -1,36 +1,31 @@
 package service
 
-import domain.GameSnap
+import SnapSerde._
 import zio._
+import zio.config.typesafe.TypesafeConfigProvider
 import zio.json._
 import zio.kafka.consumer.{Consumer, ConsumerSettings, Subscription}
 import zio.kafka.serde.Serde
-import zio.stream.{ZSink, ZStream}
-
-import java.io.File
-import service.BrokerConf._
+import zio.stream.ZStream
 
 object SnapConsumer extends ZIOAppDefault {
 
-  private val consumer: ZLayer[Any, Throwable, Consumer] =
-    ZLayer.scoped(Consumer.make(ConsumerSettings(List(BROKER)).withGroupId(SNAP_GROUP)))
+  override val bootstrap: ZLayer[Any, Nothing, Unit] =
+    Runtime.setConfigProvider(TypesafeConfigProvider.fromResourcePath())
 
-  val snapSerde: Serde[Any, GameSnap] = Serde.string.inmapM(string =>
-    ZIO
-      .fromEither(string.fromJson[GameSnap])
-      .mapError(msg => new RuntimeException(msg))
-  )(gameSnap => ZIO.from(gameSnap.toJson))
-
-  private val stringStream = Consumer
-    .plainStream(Subscription.topics(SNAP_TOPIC), Serde.string, snapSerde)
-    .map(record => record.value.toJson)
-    .intersperse("\n")
-    .flatMap(json => ZStream.fromIterable(json.getBytes))
-
-  def runStream(gameId: String) = stringStream.run(
-    ZSink.fromFile(new File(s"./$gameId"))
-  ).provide(consumer)
-
-  def run = runStream("stuff").exit
+  override def run = {
+    val stream = for {
+      broker    <- ZIO.config(Config.string("broker-host-port"))
+      snapTopic <- ZIO.config(Config.string("broker-snap-topic"))
+      snapGroup <- ZIO.config(Config.string("broker-snap-group"))
+      consumer = Consumer.make(ConsumerSettings(List(broker)).withGroupId(snapGroup))
+      stringStream = Consumer
+        .plainStream(Subscription.topics(snapTopic), Serde.string, snapSerde)
+        .map(record => record.value.toJson)
+        .intersperse("\n")
+        .flatMap(json => ZStream.fromIterable(json.getBytes))
+    } yield stringStream
+    stream.exit
+  }
 
 }

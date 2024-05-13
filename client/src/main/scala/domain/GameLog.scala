@@ -1,54 +1,12 @@
 package domain
 
-import domain.GameSnap.asXY
 import util.BoardCmdSolver
 import zio.json._
 
 import scala.collection.mutable.ListBuffer
 
-case class GameLog(gameId: String, on: List[Entry], off: List[Entry])
+case class GameLog(gameId: String, on: List[LogEntry], off: List[LogEntry])
 
-case class Bishop(id: Int, firstAt: RoundXY, lastAt: RoundXY, moves: List[Int] = Nil) extends Entry {
-  def describe(suffix: String): String = describe(s"This bishop with id $id ", suffix)
-}
-case class Rook(id: Int, firstAt: RoundXY, lastAt: RoundXY, moves: List[Int] = Nil) extends Entry {
-  def describe(suffix: String): String = describe(s"This rook with id $id ", suffix)
-}
-case class RoundXY(round: Int, at: Int) {
-  def xy: (Int, Int) = asXY(at)
-}
-
-sealed trait Entry {
-  val id: Int
-  val moves: List[Int] // from newest-to-oldest is left-to-right
-  val firstAt, lastAt: RoundXY
-  def describe(prefix: String): String
-  def describe(prefix: String, suffix: String): String =
-    s"${prefix}spent ${lastAt.round - firstAt.round} on the game board." +
-      s"It was first put on the board in round ${firstAt.round} on field ${asXY(firstAt.at)}." +
-      s"It moved ${moves.size} times and travelled total distance of $distance" +
-      s"It was last seen in round ${lastAt.round} on field ${asXY(lastAt.at)}.$suffix"
-
-  def distance: Int = (moves.sliding(2, 2) map { case List(i, j) =>
-    if ((j - i) % 9 == 0) (j - i) / 9 //      diagonal \\ distance
-    else if (i % 8 == j % 8) (j - i) / 8   // vertical distance
-    else if ((j - i) % 7 == 0) (j - i) / 7 // diagonal // distance
-    else j - i                             // horizontal distance
-  }).sum
-}
-
-object Entry {
-  implicit val entryEnc: JsonEncoder[Entry]     = DeriveJsonEncoder.gen[Entry]
-  implicit val entryDec: JsonDecoder[Entry]     = DeriveJsonDecoder.gen[Entry]
-  implicit val gameLogEnc: JsonEncoder[GameLog] = DeriveJsonEncoder.gen[GameLog]
-  implicit val gameLogDec: JsonDecoder[GameLog] = DeriveJsonDecoder.gen[GameLog]
-  implicit val bishopEnc: JsonEncoder[Bishop]   = DeriveJsonEncoder.gen[Bishop]
-  implicit val bishopDec: JsonDecoder[Bishop]   = DeriveJsonDecoder.gen[Bishop]
-  implicit val rookEnc: JsonEncoder[Rook]       = DeriveJsonEncoder.gen[Rook]
-  implicit val rookDec: JsonDecoder[Rook]       = DeriveJsonDecoder.gen[Rook]
-  implicit val roundXYenc: JsonEncoder[RoundXY] = DeriveJsonEncoder.gen[RoundXY]
-  implicit val roundXYdec: JsonDecoder[RoundXY] = DeriveJsonDecoder.gen[RoundXY]
-}
 
 object GameLog {
 
@@ -71,17 +29,17 @@ object GameLog {
         .map(_.describe(ON_BOARD_SUFFIX))
         .orElse(findOffBoard(id).map(_.describe(OFF_BOARD_SUFFIX)))
 
-    def findOffBoard(id: Int): Option[Entry] = gameLog.off.find(_.id == id)
-    def findOnBoard(id: Int): Option[Entry]  = gameLog.on.find(_.id == id)
+    def findOffBoard(id: Int): Option[LogEntry] = gameLog.off.find(_.id == id)
+    def findOnBoard(id: Int): Option[LogEntry]  = gameLog.on.find(_.id == id)
 
-    def find(id: Int): Option[Entry] = findOnBoard(id) orElse (findOffBoard(id))
+    def find(id: Int): Option[LogEntry] = findOnBoard(id) orElse (findOffBoard(id))
   }
 
   def replayFromSnaps(gameId: String, snaps: Seq[GameSnap]): Either[String, GameLog] = {
 
     val rooksOnBoard   = ListBuffer[Rook]()
     val bishopsOnBoard = ListBuffer[Bishop]()
-    val offBoard       = ListBuffer[Entry]()
+    val offBoard       = ListBuffer[LogEntry]()
     var round: Int     = 0
     var nextId: Int    = 0
 
@@ -132,10 +90,10 @@ object GameLog {
       s"GameLog replay failed at offset: $round"
     )
   }
-  private def findByLastAt[E <: Entry](at: Int, buffer: ListBuffer[E]): Option[(Int, E)] =
+  private def findByLastAt[E <: LogEntry](at: Int, buffer: ListBuffer[E]): Option[(Int, E)] =
     findIndexByLastAt(at, buffer).map(idx => (idx, buffer(idx)))
 
-  private def findIndexByLastAt[E <: Entry](at: Int, buffer: ListBuffer[E]): Option[Int] = {
+  private def findIndexByLastAt[E <: LogEntry](at: Int, buffer: ListBuffer[E]): Option[Int] = {
     val idx = buffer.indexWhere(_.lastAt.at == at)
     Option.when(idx >= 0)(idx)
   }

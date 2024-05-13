@@ -3,7 +3,6 @@ package util
 import domain.GameSnap
 
 import scala.annotation.tailrec
-import scala.util.Random
 
 object GameSnapUtil {
 
@@ -38,24 +37,12 @@ object GameSnapUtil {
     bishop: Char = BISHOP_CHAR,
     void: Char = VOID_CHAR
   ): String =
-    (0 until LONG_BITS).map { i =>
+    (0 until LONG_BIT_COUNT).map { i =>
       if (snap.bishops.getBool(i)) bishop
       else if (snap.rooks.getBool(i)) rook
       else void
     }.mkString
 
-  def genRandSnap(rsFreq: Int, bsFreq: Int, voidFreq: Int): GameSnap = {
-    assert(0 <= rsFreq && 0 <= bsFreq && 0 <= voidFreq, "Frequency can't be negative!")
-    @tailrec
-    def loop(rs: Long, bs: Long, i: Int): GameSnap =
-      if (i < LONG_BITS) {
-        val needle = Random.nextLong(rsFreq + bsFreq + voidFreq)
-        if (needle < rsFreq) loop(rs | (1L << i), bs, i + 1)
-        else if (needle < rsFreq + bsFreq) loop(rs, bs | (1L << i), i + 1)
-        else loop(rs, bs, i + 1)
-      } else GameSnap(rs, bs)
-    loop(0, 0, 0)
-  }
 
   def parse(
     input: String,
@@ -64,7 +51,7 @@ object GameSnapUtil {
     bishop: Char = BISHOP_CHAR
   ): GameSnap = {
     val cleanInput = input.filterNot(v => v.isWhitespace && (!skipDigits || v.isDigit))
-    val safeLength = cleanInput.length.min(LONG_BITS)
+    val safeLength = cleanInput.length.min(LONG_BIT_COUNT)
     @tailrec
     def loop(rs: Long, bs: Long, i: Int): GameSnap =
       if (i < safeLength) {
