@@ -53,7 +53,7 @@ object RestService extends ZIOAppDefault {
       .in(jsonBody[List[Hex]])
       .out(jsonBody[Long])
 
-  private def saveSnapsLogic(gameId: String, round: String, snaps: List[Hex]): ZIO[Any, Nothing, Long] =
+  private def saveSnapsLogic(gameId: String, round: String, snaps: List[Hex]): ZIO[Any, Nothing, Long] = {
     ZIO
       .succeed(scala.util.Try { round.toLong } getOrElse 0L)
       .flatMap { round =>
@@ -62,6 +62,7 @@ object RestService extends ZIOAppDefault {
           .orElse(ZIO.succeed(0L))
       }
       .provideLayer(redis)
+  }
 
   private val appRoutes = List(
     appStatusCheck.zServerLogic(_ => appStatusLogic()),

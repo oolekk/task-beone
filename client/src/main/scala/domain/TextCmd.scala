@@ -1,6 +1,8 @@
 package domain
 
+import app.RestClient
 import domain.GameSnap.Error.XY_OUT_OF_RANGE_MSG
+import zio.ZIO
 
 object TextCmd {
 
@@ -24,19 +26,12 @@ object TextCmd {
   case class AddBishop(at: (Int, Int))              extends TextCmd with Update
   case class Move(from: (Int, Int), to: (Int, Int)) extends TextCmd with Update
 
-  def applyToGame(cmd: TextCmd, game: Game): Either[String, Game] = cmd match {
-    case c: Update    => applyUpdate(c, game)
-    case Load(gameId) => loadGame(gameId)
-    case Save         => saveGame(game.id, game.round)
-    case _            => Right(game)
-  }
-
-  def loadGame(gameId: String): Either[String, Game] = {
-    Right(Game.empty(gameId))
-  }
-
-  def saveGame(gameId: String, gameRound: Long): Either[String, Game] = {
-    Right(Game.empty(gameId))
+  def applyToGame(cmd: TextCmd, game: Game) = cmd match {
+    case c: Update => ZIO.fromEither(applyUpdate(c, game))
+    case Load(gameId) =>
+      for { snaps <- RestClient.load(gameId); size = snaps.size } yield Game(gameId, size, snaps, size)
+    case Save => for { savedAt <- RestClient.save(game) } yield game.copy(savedAt = savedAt)
+    case _    => ZIO.fromEither(Right(game))
   }
 
   def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {

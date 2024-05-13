@@ -1,6 +1,6 @@
 package domain
 
-case class Game(id: String, round: Int, snaps: List[GameSnap], savedAt: Int = -1)
+case class Game(id: String, round: Int, snaps: List[GameSnap], savedAt: Int = 0)
 
 object Game {
 
