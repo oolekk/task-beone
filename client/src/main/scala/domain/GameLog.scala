@@ -7,7 +7,6 @@ import scala.collection.mutable.ListBuffer
 
 case class GameLog(gameId: String, on: List[LogEntry], off: List[LogEntry])
 
-
 object GameLog {
 
   implicit val enc: JsonEncoder[GameLog] = DeriveJsonEncoder.gen[GameLog]
@@ -15,46 +14,54 @@ object GameLog {
 
   implicit class GameLogOps(gameLog: GameLog) {
 
-    private val ON_BOARD_SUFFIX  = " He is still on the board."
-    private val OFF_BOARD_SUFFIX = " He was taken off the board."
-
-    def describeAllOnBoard: List[String] =
-      gameLog.on.map(_.describe(ON_BOARD_SUFFIX))
-
-    def describeAllOffBoard: List[String] =
-      gameLog.off.map(_.describe(ON_BOARD_SUFFIX))
+    private val ON_BOARD_SUFFIX  = " Still on the board."
+    private val OFF_BOARD_SUFFIX = " Taken off the board."
 
     def describe(id: Int): Option[String] =
       findOnBoard(id)
         .map(_.describe(ON_BOARD_SUFFIX))
         .orElse(findOffBoard(id).map(_.describe(OFF_BOARD_SUFFIX)))
 
-    def findOffBoard(id: Int): Option[LogEntry] = gameLog.off.find(_.id == id)
-    def findOnBoard(id: Int): Option[LogEntry]  = gameLog.on.find(_.id == id)
+    def describeAll: List[String] = {
+      val offInfo = describeAllOffBoard
+      if (offInfo.isEmpty) describeAllOnBoard
+      else describeAllOnBoard ::: s"NO LONGER ON THE BOARD:" :: describeAllOffBoard
+    }
 
-    def find(id: Int): Option[LogEntry] = findOnBoard(id) orElse (findOffBoard(id))
+    private def describeAllOnBoard: List[String] =
+      gameLog.on.map(_.describe(ON_BOARD_SUFFIX))
+
+    private def describeAllOffBoard: List[String] =
+      gameLog.off.map(_.describe(OFF_BOARD_SUFFIX))
+
+    private def findOffBoard(id: Int): Option[LogEntry] = gameLog.off.find(_.id == id)
+    private def findOnBoard(id: Int): Option[LogEntry]  = gameLog.on.find(_.id == id)
+
+    def find(id: Int): Option[LogEntry] = findOnBoard(id) orElse findOffBoard(id)
   }
 
-  def replayFromSnaps(gameId: String, snaps: Seq[GameSnap]): Either[String, GameLog] = {
+  def replay(gameId: String, snaps: Seq[GameSnap]): Either[String, GameLog] = {
 
     val rooksOnBoard   = ListBuffer[Rook]()
     val bishopsOnBoard = ListBuffer[Bishop]()
     val offBoard       = ListBuffer[LogEntry]()
     var round: Int     = 0
-    var nextId: Int    = 0
+    var nextId: Int    = 1
 
-    val changes: Iterator[Either[String, BoardCmd]] = snaps
-      .sliding(2, 2)
-      .map { case List(prev, next) => BoardCmdSolver.solve(prev, next) }
+    val changes: Iterator[Either[String, BoardCmd]] = if (snaps.nonEmpty) {
+      (GameSnap.empty :: snaps.toList.reverse)
+        .sliding(2, 1)
+        .collect { case List(prev, next) => BoardCmdSolver.solve(prev, next) }
+    } else Iterator.empty
 
     // early-finish drop-while trick, explained in LongBitOps
     val dropAsWeGo: Iterator[Either[String, BoardCmd]] = changes.dropWhile {
       case Right(RookAdded(at)) =>
         val rat = RoundXY(round, at)
-        rooksOnBoard.prepend(Rook(nextId, rat, rat)); round += 1; nextId += 1; true
+        rooksOnBoard.prepend(Rook(nextId, rat, rat, List(at))); round += 1; nextId += 1; true
       case Right(BishopAdded(at)) =>
         val rat = RoundXY(round, at)
-        bishopsOnBoard.prepend(Bishop(nextId, rat, rat)); round += 1; nextId += 1; true
+        bishopsOnBoard.prepend(Bishop(nextId, rat, rat, List(at))); round += 1; nextId += 1; true
       case Right(RookTaken(at)) =>
         findIndexByLastAt(at, rooksOnBoard).exists { idx =>
           offBoard.prepend(rooksOnBoard.remove(idx).copy(lastAt = RoundXY(round, at)))

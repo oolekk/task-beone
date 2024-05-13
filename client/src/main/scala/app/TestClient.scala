@@ -1,7 +1,7 @@
 package app
 
 import domain.TextCmd._
-import domain.{Game, GameSnap, TextCmd}
+import domain.{Game, GameLog, GameSnap, TextCmd}
 import util.GameSnapUtil
 import zio.Console._
 import zio._
@@ -21,18 +21,7 @@ object TestClient extends ZIOAppDefault {
       randSnap <- ZIO.from(GameSnap.gen())
       _        <- printLine(GameSnapUtil.asGameBoard(randSnap))
       _        <- print(PROMPT)
-      _        <- repl(Game.empty.copy(moved = randSnap))
-    } yield ()
-
-  def replCheckGone(game: Game, xy: (Int, Int)): ZIO[Any, Throwable, Unit] =
-    for {
-      _ <- {
-        if (game.taken.isBishop(xy)) printLine(s"${xy} was last location of a Bishop")
-        else if (game.taken.isRook(xy)) printLine(s"${xy} was last location of a Rook")
-        else printLine(s"Nothing was taken away from ${xy}")
-      }
-      _ <- print(PROMPT)
-      _ <- repl(game)
+      _        <- repl(Game.empty.copy(snaps = List(randSnap)))
     } yield ()
 
   def repl(game: Game): ZIO[Any, Throwable, Unit] =
@@ -43,18 +32,27 @@ object TestClient extends ZIOAppDefault {
           _ <- print(cmdOpt.map(_.toString + "\n").getOrElse(""))
           nextGame = cmdOpt.flatMap(cmd => TextCmd.applyToGame(cmd, game))
           _ <- cmdOpt match {
-            case Right(Load(_))  => printLine(s"GameId: ${game.id} round: ${game.round}")
-//            case Right(Info)     => c.printLine(s"GameId: ${game.id} round: ${game.round}")
-            case Right(Rand)     => replRandBoard()
+            case Right(Load(gameId)) => printLine(s"LOAD GameId: ${gameId} round: ${game.round}")
+            case Right(Save)         => printLine(s"SAVE GameId: ${game.id} round: ${game.round}")
+            case Right(Rand)         => replRandBoard()
+            case Right(GameInfo) =>
+              GameLog
+                .replay(game.id, game.snaps)
+                .fold(err => printLine(err), log => printLine(log.describeAll.mkString("\n")))
+            case Right(PieceInfo(id)) =>
+              GameLog
+                .replay(game.id, game.snaps)
+                .fold(err => printLine(err), log => printLine(log.describe(id).getOrElse("NO SUCH ID")))
             case _ =>
               nextGame match {
                 case Left(msg) => printLine(msg)
-                case Right(g)  => printLine(GameSnapUtil.asGameBoard(g.moved))
+                case Right(game) =>
+                  printLine(GameSnapUtil.asGameBoard(game.snap))
               }
           }
           _ <- print(PROMPT)
         } yield nextGame
-        nextGameZio.flatMap { nextGame => nextGame.fold(_ => repl(game), g => repl(g)) }
+        nextGameZio.flatMap { nextGame => nextGame.fold(_ => repl(game), game => repl(game)) }
       }
     } yield ()
 

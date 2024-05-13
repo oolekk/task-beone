@@ -10,8 +10,8 @@ object GameSnapUtil {
 
   private val SIZE: Int = 8
 
-  private val ROOK_CHAR   = '✚'
-  private val BISHOP_CHAR = '⨯'
+  private val ROOK_CHAR   = '■'
+  private val BISHOP_CHAR = '●'
   private val VOID_CHAR   = '·'
 
   def asGameBoard(
@@ -28,7 +28,12 @@ object GameSnapUtil {
       .mkString((0 to 7).mkString("   ", "  ", "\n"), "\n", "")
   }
 
-  def asMultiLine(snap: GameSnap, rook: Char = ROOK_CHAR, bishop: Char = BISHOP_CHAR, void: Char = VOID_CHAR): String =
+  private def asMultiLine(
+    snap: GameSnap,
+    rook: Char = ROOK_CHAR,
+    bishop: Char = BISHOP_CHAR,
+    void: Char = VOID_CHAR
+  ): String =
     asOneLine(snap, rook, bishop, void).sliding(SIZE, SIZE).map(_.mkString("  ")).mkString("\n")
 
   private def asOneLine(
@@ -42,7 +47,6 @@ object GameSnapUtil {
       else if (snap.rooks.getBool(i)) rook
       else void
     }.mkString
-
 
   def parse(
     input: String,

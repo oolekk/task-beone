@@ -5,8 +5,8 @@ object LongBitOps {
   // Low level bit operations, 64-bits for 64 fields on board
   // Will be used to validate moves and board rapidly
 
-  val LONG_BIT_COUNT = 64
-  val LONG_HEX_COUNT = 16
+  val LONG_BIT_COUNT: Int = 64
+  val LONG_HEX_COUNT: Int = 16
 
   private val BIT_BIT_SIZE = 1
   private val HEX_BIT_SIZE = 4
@@ -60,13 +60,13 @@ object LongBitOps {
     def bitString: String = {
       val s = bits.toBinaryString
       if (bits < 0) s
-      else "0" * (64 - s.length) + s
+      else "0" * (LONG_BIT_COUNT - s.length) + s
     }
 
     def hexString: String = {
       val hex = bits.toHexString
-      if (hex.length == 16) hex
-      else "0" * (16 - hex.length) + hex
+      if (hex.length == LONG_HEX_COUNT) hex
+      else "0" * (LONG_HEX_COUNT - hex.length) + hex
     }
 
     def setBitTo0(i: Int): Long = bits & ~(1L << i) // right-hand is single 0

@@ -7,8 +7,8 @@ import domain._
 object BoardCmdSolver {
   import util.LongBitOps._
   def solve(prev: GameSnap, next: GameSnap): Either[String, BoardCmd] = {
-    val rookXors   = (prev.rooks ^ next.rooks).find1s
-    val bishopXors = (prev.bishops ^ next.bishops).find1s
+    val rookXors   = prev.rooks.xor(next.rooks).find1s
+    val bishopXors = prev.bishops.xor(next.bishops).find1s
     (rookXors, bishopXors) match {
       case (List(at), Nil) =>
         rookAddedOrTaken(prev, next, at).toRight(INVALID_ROOK_PLACEMENT)
@@ -23,15 +23,15 @@ object BoardCmdSolver {
   }
 
   private def rookAddedOrTaken(prev: GameSnap, next: GameSnap, at: Int): Option[BoardCmd] = {
-    if (prev.rooks.getBool(at)) Some(RookTaken(at))
-    else if ((next.rooks & prev.bishops) == 0) Some(RookAdded(at))
-    else None
+    if (next.rooks.overlaps(prev.bishops)) None
+    else if (prev.rooks.getBool(at)) Some(RookTaken(at))
+    else Some(RookAdded(at))
   }
 
   private def bishopAddedOrTaken(prev: GameSnap, next: GameSnap, at: Int): Option[BoardCmd] = {
-    if (prev.bishops.getBool(at)) Some(BishopTaken(at))
-    else if ((next.bishops & prev.rooks) == 0) Some(BishopAdded(at))
-    else None
+    if (next.bishops.overlaps(prev.rooks)) None
+    else if (prev.bishops.getBool(at)) Some(BishopTaken(at))
+    else Some(BishopAdded(at))
   }
 
   private def rookMoved(prev: GameSnap, next: GameSnap, xors: List[Int]): Option[BoardCmd] = {

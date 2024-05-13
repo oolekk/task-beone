@@ -18,7 +18,6 @@ object TextCmd {
   case class Load(gameId: String = "") extends TextCmd
   case object GameInfo                 extends TextCmd
   case class PieceInfo(id: Int)        extends TextCmd
-  case class FieldInfo(at: (Int, Int)) extends TextCmd
 
   case class Take(from: (Int, Int))                 extends TextCmd with Update
   case class AddRook(at: (Int, Int))                extends TextCmd with Update
@@ -42,29 +41,26 @@ object TextCmd {
 
   def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {
     case AddBishop(xy) =>
-      game.moved.addBishop(xy).map(nextSnap => game.copy(round = game.round + 1, moved = nextSnap))
+      game.snap.addBishop(xy).map(nextSnap => game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps))
     case AddRook(xy) =>
-      game.moved.addRook(xy).map(nextSnap => game.copy(round = game.round + 1, moved = nextSnap))
+      game.snap.addRook(xy).map(nextSnap => game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps))
     case Move(xyOld, xyNew) =>
-      game.moved.movePiece(xyOld, xyNew).map(nextSnap => game.copy(round = game.round + 1, moved = nextSnap))
+      game.snap
+        .movePiece(xyOld, xyNew)
+        .map(nextSnap => game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps))
     case Take(xy) =>
-      game.moved.takePiece(xy).map { nextSnap =>
-        val nextGone = if (game.moved.isRook(xy)) {
-          game.taken.forceRook(xy)
-        } else if (game.moved.isBishop(xy)) {
-          game.taken.forceBishop(xy)
-        } else game.taken // shouldn't really happen, since update was successful either rook or bishop was taken
-        game.copy(round = game.round + 1, moved = nextSnap, taken = nextGone)
+      game.snap.takePiece(xy).map { nextSnap =>
+        game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps)
       }
   }
 
   def parse(text: String): Either[String, TextCmd] = {
     text.takeWhile(!_.isWhitespace).toLowerCase.trim match {
-      case _ if text.isBlank              => Right(Noop)
-      case "exit"                         => Right(Exit)
-      case "rand"                         => Right(Rand)
-      case t @ "save" if (t == text.trim) => Right(Save)
-      case "load"                         => Right(Load(text.drop(4).trim))
+      case _ if text.isBlank            => Right(Noop)
+      case "exit"                       => Right(Exit)
+      case "rand"                       => Right(Rand)
+      case t @ "save" if t == text.trim => Right(Save)
+      case "load"                       => Right(Load(text.drop(4).trim))
       case "r" | "new rook" | "add rook" | "put rook" =>
         parseDigits(text, 2).map { case List(x, y) => AddRook(x, y) }
       case "b" | "new bishop" | "add bishop" | "put bishop" =>
@@ -75,9 +71,7 @@ object TextCmd {
         parseDigits(text, 2).map { case List(x, y) => Take(x, y) }
       case t @ "info" =>
         if (t == text.trim) Right(GameInfo)
-        else {
-          parseDigits(text, 1).map { case List(id) => PieceInfo(id) }
-        } orElse parseDigits(text, 2).map { case List(x, y) => FieldInfo(x, y) }
+        else parseDigits(text, 1).map { case List(id) => PieceInfo(id) }
       case _ => Left(TextCmd.INVALID_COMMAND_MSG)
     }
   }
