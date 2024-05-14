@@ -5,34 +5,33 @@ import zio.json._
 
 import scala.collection.mutable.ListBuffer
 
-case class GameLog(gameId: String, on: List[LogEntry], off: List[LogEntry])
+case class GameLog(on: List[LogEntry], off: List[LogEntry])
 
 object GameLog {
+
+  val empty: GameLog = GameLog(Nil, Nil)
 
   implicit val enc: JsonEncoder[GameLog] = DeriveJsonEncoder.gen[GameLog]
   implicit val dec: JsonDecoder[GameLog] = DeriveJsonDecoder.gen[GameLog]
 
   implicit class GameLogOps(gameLog: GameLog) {
 
-    private val ON_BOARD_SUFFIX  = " Still on the board."
-    private val OFF_BOARD_SUFFIX = " Taken off the board."
-
-    def describe(id: Int): Option[String] =
+    def describeOne(id: Int, round: Int): Option[String] =
       findOnBoard(id)
-        .map(_.describe(ON_BOARD_SUFFIX))
-        .orElse(findOffBoard(id).map(_.describe(OFF_BOARD_SUFFIX)))
+        .map(_.describe(round, true))
+        .orElse(findOffBoard(id).map(_.describe(round, false)))
 
-    def describeAll: List[String] = {
-      val offInfo = describeAllOffBoard
-      if (offInfo.isEmpty) describeAllOnBoard
-      else describeAllOnBoard ::: s"NO LONGER ON THE BOARD:" :: describeAllOffBoard
+    def describeAll(round: Int): List[String] = {
+      val offInfo = describeAllOffBoard(round)
+      if (offInfo.isEmpty) describeAllOnBoard(round)
+      else describeAllOnBoard(round) ::: s"NO LONGER ON THE BOARD:" :: describeAllOffBoard(round)
     }
 
-    private def describeAllOnBoard: List[String] =
-      gameLog.on.map(_.describe(ON_BOARD_SUFFIX))
+    private def describeAllOnBoard(round: Int): List[String] =
+      gameLog.on.map(_.describe(round, true))
 
-    private def describeAllOffBoard: List[String] =
-      gameLog.off.map(_.describe(OFF_BOARD_SUFFIX))
+    private def describeAllOffBoard(round: Int): List[String] =
+      gameLog.off.map(_.describe(round, false))
 
     private def findOffBoard(id: Int): Option[LogEntry] = gameLog.off.find(_.id == id)
     private def findOnBoard(id: Int): Option[LogEntry]  = gameLog.on.find(_.id == id)
@@ -40,7 +39,7 @@ object GameLog {
     def find(id: Int): Option[LogEntry] = findOnBoard(id) orElse findOffBoard(id)
   }
 
-  def replay(gameId: String, snaps: Seq[GameSnap]): Either[String, GameLog] = {
+  def replay(game: Game): Either[String, GameLog] = {
 
     val rooksOnBoard   = ListBuffer[Rook]()
     val bishopsOnBoard = ListBuffer[Bishop]()
@@ -48,8 +47,8 @@ object GameLog {
     var round: Int     = 0
     var nextId: Int    = 1
 
-    val changes: Iterator[Either[String, BoardCmd]] = if (snaps.nonEmpty) {
-      (GameSnap.empty :: snaps.toList.reverse)
+    val changes: Iterator[Either[String, BoardCmd]] = if (game.snaps.nonEmpty) {
+      (GameSnap.empty :: game.snaps.reverse)
         .sliding(2, 1)
         .collect { case List(prev, next) => BoardCmdSolver.solve(prev, next) }
     } else Iterator.empty
@@ -90,7 +89,6 @@ object GameLog {
     Either.cond(
       dropAsWeGo.isEmpty,
       GameLog(
-        gameId = gameId,
         on = (rooksOnBoard ++ bishopsOnBoard).toList.sortBy(_.id),
         off = offBoard.toList.sortBy(_.id)
       ),

@@ -13,9 +13,9 @@ object TextCmd {
   sealed trait TextCmd
   sealed trait Update // mark commands which update the game board
 
-  case object Rand                     extends TextCmd
-  case object Noop                     extends TextCmd
   case object Exit                     extends TextCmd
+  case object Noop                     extends TextCmd
+  case object Rand                     extends TextCmd
   case object Save                     extends TextCmd
   case class Load(gameId: String = "") extends TextCmd
   case object GameInfo                 extends TextCmd
@@ -29,9 +29,11 @@ object TextCmd {
   def applyToGame(cmd: TextCmd, game: Game) = cmd match {
     case c: Update => ZIO.fromEither(applyUpdate(c, game))
     case Load(gameId) =>
-      for { snaps <- RestClient.load(gameId); size = snaps.size } yield Game(gameId, size, snaps, size)
-    case Save => for { savedAt <- RestClient.save(game) } yield game.copy(savedAt = savedAt)
-    case _    => ZIO.fromEither(Right(game))
+      for { snaps <- RestClient.load(gameId); size = snaps.size } yield Game(gameId, size, size, snaps)
+    case Save                    => for { savedAt <- RestClient.save(game) } yield game.copy(saved = savedAt)
+    case Rand                    => ZIO.fromEither(Right(Game.rand))
+    case GameInfo | PieceInfo(_) => ZIO.fromEither(game.updateLog)
+    case _                       => ZIO.fromEither(Right(game))
   }
 
   def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {

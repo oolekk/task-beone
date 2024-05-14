@@ -6,47 +6,47 @@ import zio._
 import zio.http._
 import zio.json._
 
-import java.time.temporal.ChronoUnit
+import java.time.temporal.ChronoUnit.SECONDS
 
 object RestClient extends ZIOAppDefault {
 
-  def load(gameId: String): ZIO[Any, String, List[GameSnap]] =
+  def load(gameId: String): ZIO[ZIOAppArgs & Scope, String, List[GameSnap]] =
     for {
       resp <- Client
         .request(
-          Request.get(s"http://localhost:8090/load/${gameId}")
+          Request.get(s"http://localhost:8090/load/$gameId")
         )
-        .timeoutFail("LOAD TIMED OUT")(Duration(3, ChronoUnit.SECONDS))
+        .timeoutFail("Load timed out!")(Duration(3, SECONDS))
         .provide(Client.default, Scope.default)
-        .mapError(err => "FAILED TO FETCH")
+        .mapError(err => "Load failed to fetch response!")
       str <- resp.body.asString
-        .mapError(err => "FAILED TO READ")
+        .mapError(err => "Load failed to read response!")
       hexList <- ZIO
         .fromEither(Hex.listDecoder.decodeJson(str))
-        .mapError(err => "FAILED TO DECODE")
+        .mapError(err => "Load failed to decode response!")
       snaps <- ZIO
         .foreach(hexList)(hex => GameSnap.zioFromHex(hex.hex))
-        .mapError(err => "FAILED TO PARSE")
+        .mapError(err => "Load failed to decode snaps!")
     } yield snaps
 
-  def save(game: Game): ZIO[Any, String, Int] = {
-    val unsaved = game.snaps.take(game.round - game.savedAt).reverse
+  def save(game: Game): ZIO[ZIOAppArgs & Scope, String, Int] = {
+    val unsaved = game.snaps.take(game.round - game.saved).reverse
     for {
       resp <- Client
         .request(
           Request.post(
-            path = s"http://localhost:8090/save/${game.id}/${game.savedAt}",
+            path = s"http://localhost:8090/save/${game.id}/${game.saved}",
             body = Body.fromString(unsaved.toJson)
           )
         )
-        .timeoutFail("SAVE TIMED OUT")(Duration(3, ChronoUnit.SECONDS))
+        .timeoutFail("Save timed out!")(Duration(3, SECONDS))
         .provide(Client.default, Scope.default)
-        .mapError(err => "FAILED TO FETCH ")
+        .mapError(err => "Save failed to fetch response!")
       body <- resp.body.asString
-        .mapError(err => "FAILED TO READ")
+        .mapError(err => "Save failed to read response!")
       savedAt <- ZIO
         .attempt(body.toInt)
-        .mapError(err => "FAILED TO DECODE")
+        .mapError(err => "Save failed to decode response!")
     } yield savedAt
   }
 
