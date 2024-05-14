@@ -16,8 +16,7 @@ lazy val application = (project in file("application"))
 
 lazy val client = (project in file("client"))
   .settings(
-    name := "client",
-    libraryDependencies ++= Dependencies.client
+    name := "client"
   ).dependsOn(common)
 
 lazy val root = (project in file("."))

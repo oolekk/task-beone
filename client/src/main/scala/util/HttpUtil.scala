@@ -37,7 +37,7 @@ object HttpUtil {
       resp <- Client
         .request(
           Request.post(
-            path = s"${configuration.rest.saveGameUrl}${game.id}/${game.saved}",
+            path = s"${configuration.rest.saveGameUrl}/${game.id}/${game.saved}",
             body = Body.fromString(payload)
           )
         )

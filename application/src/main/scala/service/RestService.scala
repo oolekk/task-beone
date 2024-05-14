@@ -36,8 +36,22 @@ object RestService extends ZIOAppDefault {
       statusMsg <- ZIO.succeed("SERVICE IS UP")
     } yield statusMsg
 
+  private val rookValidAdd: RestPoint[(String, String, Int), Unit] =
+    endpoint.get.in("diff" / "rook" / "valid" / "add" / path[String] / path[String] / path[Int])
+  private val rookValidTake: RestPoint[(String, String, Int), Unit] =
+    endpoint.get.in("diff" / "rook" / "valid" / "take" / path[String] / path[String] / path[Int])
+  private val rookValidMoveEndpoint: RestPoint[(String, String, Int, Int), Unit] =
+    endpoint.get.in("diff" / "rook" / "valid" / "move" / path[String] / path[String] / path[Int] / path[Int])
+
+  private val bishopValidAdd: RestPoint[(String, String, Int), Unit] =
+    endpoint.get.in("diff" / "bishop" / "valid" / "add" / path[String] / path[String] / path[Int])
+  private val bishopValidTake: RestPoint[(String, String, Int), Unit] =
+    endpoint.get.in("diff" / "bishop" / "valid" / "take" / path[String] / path[String] / path[Int])
+  private val bishopValidMoveEndpoint: RestPoint[(String, String, Int, Int), Unit] =
+    endpoint.get.in("diff" / "bishop" / "valid" / "move" / path[String] / path[String] / path[Int] / path[Int])
+
   private val loadSnapsEndpoint: RestPoint[String, HexList] =
-    endpoint.get.in("load" / path[String]).out(jsonBody[HexList])
+    endpoint.get.in("snap" / "load" / path[String]).out(jsonBody[HexList])
 
   private def loadSnapsLogic(gameId: String): ZIO[Any, Nothing, HexList] =
     RedisService
@@ -47,7 +61,7 @@ object RestService extends ZIOAppDefault {
 
   private val saveSnapsEndpoint: RestPoint[(String, String, HexList), Long] =
     endpoint.post
-      .in("save" / path[String] / path[String])
+      .in("snap" / "save" / path[String] / path[String])
       .in(jsonBody[HexList])
       .out(jsonBody[Long])
 

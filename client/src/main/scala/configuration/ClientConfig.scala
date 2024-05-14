@@ -17,6 +17,12 @@ case class KafkaConfiguration(
 )
 case class RestConfiguration(
   statusUrl: String,
+  addRookUrl: String,
+  takeRookUrl: String,
+  moveRookUrl: String,
+  addBishopUrl: String,
+  takeBishopUrl: String,
+  moveBishopUrl: String,
   loadGameUrl: String,
   saveGameUrl: String
 )
