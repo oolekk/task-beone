@@ -1,5 +1,6 @@
 package service
 
+import configuration.AppConfig
 import domain.HexList
 import sttp.apispec.openapi.circe.yaml._
 import sttp.tapir.PublicEndpoint
@@ -9,17 +10,13 @@ import sttp.tapir.json.zio.jsonBody
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
 import sttp.tapir.swagger.SwaggerUI
 import sttp.tapir.ztapir._
-import zio.Config.int
 import zio._
-import zio.config.typesafe.TypesafeConfigProvider
-import zio.redis.{CodecSupplier, Redis, RedisConfig, RedisExecutor}
+import zio.http.Server.defaultWithPort
+import zio.redis._
 import zio.schema.Schema
 import zio.schema.codec.{BinaryCodec, ProtobufCodec}
 
 object RestService extends ZIOAppDefault {
-
-  override val bootstrap: ZLayer[Any, Nothing, Unit] =
-    Runtime.setConfigProvider(TypesafeConfigProvider.fromResourcePath())
 
   private val redis = ZLayer.make[Redis & RedisExecutor & RedisConfig & CodecSupplier](
     Redis.layer,
@@ -82,10 +79,9 @@ object RestService extends ZIOAppDefault {
   private val http    = appHttp ++ swgHttp
 
   override def run: ZIO[ZIOAppArgs with Scope, Any, Any] = for {
-    port <- ZIO.config(int("http-port"))
     server <- zio.http.Server
       .serve(http)
-      .provide(zio.http.Server.defaultWithPort(port))
+      .provide(defaultWithPort(AppConfig.configuration.http.port))
       .exitCode
   } yield server
 

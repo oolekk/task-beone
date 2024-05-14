@@ -1,5 +1,6 @@
-package app
+package util
 
+import configuration.ClientConfig.configuration
 import domain._
 import zio.Console.ConsoleLive
 import zio._
@@ -7,13 +8,13 @@ import zio.http._
 
 import java.time.temporal.ChronoUnit.SECONDS
 
-object RestOps {
+object HttpUtil {
 
   def load(gameId: String): ZIO[ZIOAppArgs & Scope, String, List[GameSnap]] = {
     for {
       resp <- Client
         .request(
-          Request.get(s"http://localhost:8090/load/$gameId")
+          Request.get(s"${configuration.rest.loadGameUrl}/$gameId")
         )
         .timeoutFail("Load timed out!")(Duration(3, SECONDS))
         .provide(Client.default, Scope.default)
@@ -36,7 +37,7 @@ object RestOps {
       resp <- Client
         .request(
           Request.post(
-            path = s"http://localhost:8090/save/${game.id}/${game.saved}",
+            path = s"${configuration.rest.saveGameUrl}${game.id}/${game.saved}",
             body = Body.fromString(payload)
           )
         )
@@ -53,7 +54,7 @@ object RestOps {
 
   def status(): ZIO[ZIOAppArgs & Scope, Throwable, Unit] = for {
     resp <- Client
-      .request(Request.get("http://localhost:8090/status"))
+      .request(Request.get(configuration.rest.statusUrl))
       .provide(Client.default, Scope.default)
     body <- resp.body.asString
     _    <- ConsoleLive.printLine(body)

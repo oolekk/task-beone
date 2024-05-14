@@ -5,8 +5,9 @@ import pureconfig.ConfigObjectSource
 import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 
-case class Configuration(
-  kafka: KafkaConfiguration
+case class AppConfig(
+  kafka: KafkaConfiguration,
+  http: HttpConfiguration
 )
 case class KafkaConfiguration(
   address: String,
@@ -14,10 +15,15 @@ case class KafkaConfiguration(
   group: String,
   client: String
 )
+case class HttpConfiguration (
+  host: String,
+  port: Int
+)
 
-object Configuration {
-  def apply(config: Config): Configuration = {
+object AppConfig extends Configuration {
+  def apply(config: Config): AppConfig = {
     val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("client"))
-    configSource.loadOrThrow[Configuration]
+    configSource.loadOrThrow[AppConfig]
   }
+  val configuration: AppConfig = AppConfig(config)
 }

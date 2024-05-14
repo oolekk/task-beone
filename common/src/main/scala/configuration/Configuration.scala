@@ -2,7 +2,7 @@ package configuration
 
 import com.typesafe.config.{Config, ConfigFactory}
 
-trait AppConfiguration {
+trait Configuration {
   ConfigFactory.invalidateCaches()
 
   val config: Config = ConfigFactory
@@ -11,5 +11,4 @@ trait AppConfiguration {
     .withFallback(ConfigFactory.defaultApplication())
     .resolve()
 
-  val configuration: Configuration = Configuration(config)
 }
