@@ -1,6 +1,6 @@
 package service
 
-import domain.{FailedToFetchSnaps, GameSnap, SnapError, Hex}
+import domain.{GameSnap, HexList}
 import zio.redis.Input.StringInput
 import zio.redis.Output.LongOutput
 import zio.redis.{Redis, RedisError}
@@ -11,19 +11,14 @@ object RedisService {
   implicit val stringIn = StringInput
   implicit val longOut  = LongOutput
 
-  def loadHexSnaps(gameId: String): ZIO[Redis, RedisError, List[Hex]] =
-    pullListItems(gameId, 0 to -1).map(_.map(Hex(_)))
+  def loadHexSnaps(gameId: String): ZIO[Redis, RedisError, HexList] =
+    pullListItems(gameId, 0 to -1).map(HexList(_))
 
-  def saveHexSnaps(gameId: String, round: Long, items: List[Hex]): ZIO[Redis, RedisError, Long] =
-    pushItemsGetNewCount[Hex](gameId, round, items)(_.hex)
-
-  def loadGameSnaps(gameId: String): ZIO[Redis, SnapError, List[GameSnap]] =
-    pullListItems(gameId, 0 to -1)
-      .mapError(err => FailedToFetchSnaps(err.getMessage))
-      .flatMap(hex => ZIO.foreach(hex)(GameSnap.zioFromHex))
+  def saveHexSnaps(gameId: String, round: Long, hexList: HexList): ZIO[Redis, RedisError, Long] =
+    pushStringsGetNewCount(gameId, round, hexList.hxs)
 
   def saveGameSnaps(gameId: String, round: Long, items: List[GameSnap]): ZIO[Redis, RedisError, Long] =
-    pushItemsGetNewCount[GameSnap](gameId, round, items)(_.asHexStr)
+    pushStringsGetNewCount(gameId, round, items.map(_.asHexStr))
 
   def pullListItems(key: String, range: Range): ZIO[Redis, RedisError, List[String]] =
     for {
@@ -31,14 +26,14 @@ object RedisService {
       items <- redis.lRange(key, range).returning[String]
     } yield items.toList
 
-  def pushItemsGetNewCount[A](key: String, round: Long, items: List[A])(f: A => String): ZIO[Redis, RedisError, Long] =
+  def pushStringsGetNewCount(key: String, round: Long, items: List[String]): ZIO[Redis, RedisError, Long] =
     for {
       redis <- ZIO.service[Redis]
       status <- redis
         .eval(
           script = luaPushItemsGetNewCount,
           keys = Chunk(key, s"$round"),
-          args = Chunk.fromIterable(items.map(f))
+          args = Chunk.fromIterable(items)
         )
         .returning[Long]
     } yield status

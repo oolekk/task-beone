@@ -19,7 +19,7 @@ object Game {
 
   implicit class GameOps(game: Game) {
     def snap: GameSnap   = game.snaps.headOption.getOrElse(GameSnap.empty)
-    def noopInfo: String = s"$gameRound last saved ${game.round - game.saved} rounds ago \n$boardInfo"
+    def noopInfo: String = s"$gameRound, last saved ${game.round - game.saved} rounds ago \n$boardInfo"
     def loadInfo: String = s"LOAD $noopInfo"
     def saveInfo: String = s"SAVE $noopInfo"
 

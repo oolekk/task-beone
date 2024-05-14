@@ -1,6 +1,6 @@
 package service
 
-import domain.Hex
+import domain.HexList
 import sttp.apispec.openapi.circe.yaml._
 import sttp.tapir.PublicEndpoint
 import sttp.tapir.docs.openapi._
@@ -34,31 +34,32 @@ object RestService extends ZIOAppDefault {
 
   private val appStatusCheck: RestPoint[Unit, String] =
     endpoint.get.in("status").out(stringBody)
-  private def appStatusLogic(): ZIO[Any, Nothing, String] = for {
-    statusMsg <- ZIO.succeed("SERVICE IS UP")
-  } yield statusMsg
+  private def appStatusLogic(): ZIO[Any, Nothing, String] =
+    for {
+      statusMsg <- ZIO.succeed("SERVICE IS UP")
+    } yield statusMsg
 
-  private val loadSnapsEndpoint: RestPoint[String, List[Hex]] =
-    endpoint.get.in("load" / path[String]).out(jsonBody[List[Hex]])
+  private val loadSnapsEndpoint: RestPoint[String, HexList] =
+    endpoint.get.in("load" / path[String]).out(jsonBody[HexList])
 
-  private def loadSnapsLogic(gameId: String): ZIO[Any, Nothing, List[Hex]] =
+  private def loadSnapsLogic(gameId: String): ZIO[Any, Nothing, HexList] =
     RedisService
       .loadHexSnaps(gameId)
-      .orElse(ZIO.succeed(Nil))
+      .orElse(ZIO.succeed(HexList()))
       .provideLayer(redis)
 
-  private val saveSnapsEndpoint: RestPoint[(String, String, List[Hex]), Long] =
+  private val saveSnapsEndpoint: RestPoint[(String, String, HexList), Long] =
     endpoint.post
       .in("save" / path[String] / path[String])
-      .in(jsonBody[List[Hex]])
+      .in(jsonBody[HexList])
       .out(jsonBody[Long])
 
-  private def saveSnapsLogic(gameId: String, round: String, snaps: List[Hex]): ZIO[Any, Nothing, Long] = {
+  private def saveSnapsLogic(gameId: String, round: String, hexList: HexList): ZIO[Any, Nothing, Long] = {
     ZIO
       .succeed(scala.util.Try { round.toLong } getOrElse 0L)
       .flatMap { round =>
         RedisService
-          .saveHexSnaps(gameId, round, snaps)
+          .saveHexSnaps(gameId, round, hexList)
           .orElse(ZIO.succeed(0L))
       }
       .provideLayer(redis)
@@ -66,7 +67,9 @@ object RestService extends ZIOAppDefault {
 
   private val appRoutes = List(
     appStatusCheck.zServerLogic(_ => appStatusLogic()),
-    saveSnapsEndpoint.zServerLogic { case (gameId, round, snaps) => saveSnapsLogic(gameId, round, snaps) },
+    saveSnapsEndpoint.zServerLogic { case (gameId, round, hexList) =>
+      saveSnapsLogic(gameId, round, hexList)
+    },
     loadSnapsEndpoint.zServerLogic { gameId => loadSnapsLogic(gameId) }
   )
 
