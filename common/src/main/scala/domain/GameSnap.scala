@@ -6,7 +6,6 @@ import zio.json._
 
 import scala.util.Random
 
-
 case class GameSnap private (rs: Long, bs: Long) {
 
   // 64 bits of Long correspond to 64 fields of the game board.
@@ -31,8 +30,8 @@ object GameSnap {
 
   val SIZE: Int = 8
 
-  // immutable, can be re-used safely
   val empty: GameSnap = GameSnap(0, 0)
+
   def apply(rooks: Long, bishops: Long): GameSnap = {
     // Only valid snap can be created, so we don't have to validate or worry about it later on.
     assert(!rooks.overlaps(bishops), Error.CORRUPT_SNAP_MSG)
@@ -40,7 +39,7 @@ object GameSnap {
   }
 
   object Error {
-    val XY_OUT_OF_RANGE_MSG: String       = "XY out of range!"
+    val NO_SUCH_FIELD_MSG: String         = "No such field on the board!"
     val FIELD_NOT_VOID_MSG: String        = "Field not empty!"
     val ROOK_NOT_THERE_MSG: String        = "Rook not there!"
     val BISHOP_NOT_THERE_MSG: String      = "Bishop not there!"
@@ -55,10 +54,10 @@ object GameSnap {
     val INVALID_SNAP_HEX_MSG = "Parsing of GameSnap from invalid hex string has failed!"
   }
 
-
   implicit val encoder: JsonEncoder[GameSnap] = DeriveJsonEncoder.gen[GameSnap]
   implicit val decored: JsonDecoder[GameSnap] = DeriveJsonDecoder.gen[GameSnap]
-
+  implicit def rawIndex(xy: (Int, Int)): Int =
+    if (xy._1.min(xy._2) >= 0 && xy._1.max(xy._2) < SIZE) xy._1 + SIZE * xy._2 else -1
 
   def zioFromHex(hex: String): ZIO[Any, SnapError, GameSnap] = {
     val (rsHex, bsHex) = hex.splitAt(16)
@@ -69,7 +68,6 @@ object GameSnap {
     } yield ZIO.succeed(GameSnap(rs, bs))
   } getOrElse ZIO.fail(InvalidSnapHex)
 
-  val zioEmpty: ZIO[Any, SnapError, GameSnap] = zio(0, 0)
   def zio(rooks: Long, bishops: Long): ZIO[Any, SnapError, GameSnap] = {
     if (rooks.overlaps(bishops)) ZIO.fail(CorruptSnap$)
     else ZIO.succeed(new GameSnap(rooks, bishops))
@@ -82,8 +80,6 @@ object GameSnap {
   }
 
   def asXY(i: Int): (Int, Int) = (i % 8, i / 8)
-
-  private def rawIndex(xy: (Int, Int)): Int = xy._1 + SIZE * xy._2
 
   def rectLine(xor: Long): List[Int] = xor.find1s match {
     case List(i, j) if i / SIZE == j / SIZE => (i to j).toList // on same row
@@ -100,7 +96,19 @@ object GameSnap {
 
   implicit class GameSnapOps(snap: GameSnap) {
 
-    def asHex: Hex       = Hex(asHexStr)
+    def update(cmd: BoardCmd): Either[String, GameSnap] = cmd match {
+      case RookMoved(prevAt, nextAt)   => moveRook(prevAt, nextAt)
+      case BishopMoved(prevAt, nextAt) => moveBishop(prevAt, nextAt)
+
+      case RookAdded(at)   => addRook(at)
+      case BishopAdded(at) => addBishop(at)
+
+      case RookTaken(at)   => takeRook(at)
+      case BishopTaken(at) => takeBishop(at)
+    }
+
+    def revert(cmd: BoardCmd): Either[String, GameSnap] = update(cmd.invert)
+
     def asHexStr: String = s"${snap.rooks.hexString}${snap.bishops.hexString}"
 
     def allPieces: Long = snap.rooks | snap.bishops
@@ -108,28 +116,19 @@ object GameSnap {
     def rooks: Long   = snap.rs // When bit is 1 that field has a rook
     def bishops: Long = snap.bs // When bit is 1 that field has a bishop
 
-    def isRook(xy: (Int, Int)): Boolean =
-      bitIndex(xy).exists(snap.rooks.getBool)
+    def isRook(at: Int): Boolean =
+      bitIndex(at).exists(snap.rooks.getBool)
 
-    def isBishop(xy: (Int, Int)): Boolean =
-      bitIndex(xy).exists(snap.bishops.getBool)
+    def isBishop(at: Int): Boolean =
+      bitIndex(at).exists(snap.bishops.getBool)
 
-    def isVoid(xy: (Int, Int)): Boolean =
-      !bitIndex(xy).exists(allPieces.getBool)
+    def isVoid(at: Int): Boolean =
+      !bitIndex(at).exists(allPieces.getBool)
 
     // Each valid action produces new GameSnap
 
-    def forceRook(xy: (Int, Int)): GameSnap = {
-      val index = rawIndex(xy)
-      GameSnap(snap.rooks.setBitTo1(index), snap.bishops.setBitTo0(index))
-    }
-    def forceBishop(xy: (Int, Int)): GameSnap = {
-      val index = rawIndex(xy)
-      GameSnap(snap.rooks.setBitTo0(index), snap.bishops.setBitTo1(index))
-    }
-
-    def moveRook(xyOld: (Int, Int), xyNew: (Int, Int)): Either[String, GameSnap] =
-      snap.takeRook(xyOld).flatMap(_.addRook(xyNew)).flatMap { nextSnap =>
+    def moveRook(prevAt: Int, nextAt: Int): Either[String, GameSnap] =
+      snap.takeRook(prevAt).flatMap(_.addRook(nextAt)).flatMap { nextSnap =>
         Either.cond(
           // line from old xy to new xy must be empty except one: old xy
           rectLine(snap.rooks xor nextSnap.rooks).count(allPieces.getBool) == 1,
@@ -138,8 +137,8 @@ object GameSnap {
         )
       }
 
-    def moveBishop(xyPrev: (Int, Int), xyNext: (Int, Int)): Either[String, GameSnap] =
-      snap.takeBishop(xyPrev).flatMap(_.addBishop(xyNext)).flatMap { nextSnap =>
+    def moveBishop(prevAt: Int, nextAt: Int): Either[String, GameSnap] =
+      snap.takeBishop(prevAt).flatMap(_.addBishop(nextAt)).flatMap { nextSnap =>
         Either.cond(
           // line from old xy to new xy must be empty except one: old xy
           diagLine(snap.bishops xor nextSnap.bishops).count(allPieces.getBool) == 1,
@@ -148,39 +147,37 @@ object GameSnap {
         )
       }
 
-    def movePiece(xyPrev: (Int, Int), xyNext: (Int, Int)): Either[String, GameSnap] = {
-      if (isBishop(xyPrev)) moveBishop(xyPrev, xyNext)
-      else if (isRook(xyPrev)) moveRook(xyPrev, xyNext)
+    def movePiece(prevAt: Int, nextAt: Int): Either[String, GameSnap] = {
+      if (isBishop(prevAt)) moveBishop(prevAt, nextAt)
+      else if (isRook(prevAt)) moveRook(prevAt, nextAt)
       else Left(Error.PIECE_NOT_THERE_MSG)
     }
 
-    def addRook(xy: (Int, Int)): Either[String, GameSnap] = voidIndex(xy)
-      .map(i => GameSnap(snap.rooks.setBitTo1(i), snap.bishops))
+    def addRook(at: Int): Either[String, GameSnap] =
+      voidIndex(at).map(i => GameSnap(snap.rooks.setBitTo1(i), snap.bishops))
 
-    def addBishop(xy: (Int, Int)): Either[String, GameSnap] = voidIndex(xy)
-      .map(i => GameSnap(snap.rooks, snap.bishops.setBitTo1(i)))
+    def addBishop(at: Int): Either[String, GameSnap] =
+      voidIndex(at).map(i => GameSnap(snap.rooks, snap.bishops.setBitTo1(i)))
 
-    def takeRook(xy: (Int, Int)): Either[String, GameSnap] =
-      if (snap.isRook(xy)) Right(GameSnap(snap.rooks.setBitTo0(rawIndex(xy)), snap.bishops))
+    def takeRook(at: Int): Either[String, GameSnap] =
+      if (snap.isRook(at)) Right(GameSnap(snap.rooks.setBitTo0(at), snap.bishops))
       else Left(Error.ROOK_NOT_THERE_MSG)
 
-    def takeBishop(xy: (Int, Int)): Either[String, GameSnap] =
-      if (snap.isBishop(xy)) Right(GameSnap(snap.rooks, snap.bishops.setBitTo0(rawIndex(xy))))
+    def takeBishop(at: Int): Either[String, GameSnap] =
+      if (snap.isBishop(at)) Right(GameSnap(snap.rooks, snap.bishops.setBitTo0(at)))
       else Left(Error.BISHOP_NOT_THERE_MSG)
 
-    def takePiece(xy: (Int, Int)): Either[String, GameSnap] =
-      takeRook(xy) orElse takeBishop(xy) match {
+    def takePiece(at: Int): Either[String, GameSnap] =
+      takeRook(at) orElse takeBishop(at) match {
         case Left(_) => Left(Error.PIECE_NOT_THERE_MSG)
         case v       => v
       }
 
-    private def bitIndex(xy: (Int, Int)): Either[String, Int] = {
-      val (x, y) = xy
-      Either.cond(x >= 0 && x < SIZE && y >= 0 && y < SIZE, rawIndex(xy), Error.XY_OUT_OF_RANGE_MSG)
-    }
-
-    private def voidIndex(xy: (Int, Int)): Either[String, Int] = bitIndex(xy)
-      .flatMap(i => Either.cond(!snap.bishops.getBool(i) && !snap.rooks.getBool(i), i, Error.FIELD_NOT_VOID_MSG))
+    private def voidIndex(at: Int): Either[String, Int] =
+      bitIndex(at)
+        .flatMap(i => Either.cond(!snap.bishops.getBool(i) && !snap.rooks.getBool(i), i, Error.FIELD_NOT_VOID_MSG))
+    private def bitIndex(at: Int): Either[String, Int] =
+      Either.cond(at >= 0 && at < LONG_BIT_COUNT, at, Error.NO_SUCH_FIELD_MSG)
   }
 
 }

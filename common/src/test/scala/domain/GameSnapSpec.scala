@@ -38,9 +38,8 @@ object GameSnapSpec extends ZIOSpecDefault {
       } yield (hasOverlap, Try { GameSnap(rs, bs) })
       assertTrue(
         trySnaps.forall {
-          case (hasOverlap, trySnap) => {
+          case (hasOverlap, trySnap) =>
             hasOverlap && trySnap.isFailure || !hasOverlap && trySnap.isSuccess
-          }
         }
       )
     },
@@ -93,9 +92,9 @@ object GameSnapSpec extends ZIOSpecDefault {
         snap.addRook(r1) == Left(FIELD_NOT_VOID_MSG),    // contains rook already
         snap.addRook(b1) == Left(FIELD_NOT_VOID_MSG),    // contains bishop
         snap.addRook(4, 5).isRight,                      // available
-        snap.addRook(2, 8) == Left(XY_OUT_OF_RANGE_MSG), // 8 is beyond board size
-        snap.addRook(8, 8) == Left(XY_OUT_OF_RANGE_MSG), // even more so
-        snap.addRook(-3, 2) == Left(XY_OUT_OF_RANGE_MSG) // must be 0-7
+        snap.addRook(2, 8) == Left(NO_SUCH_FIELD_MSG), // 8 is beyond board size
+        snap.addRook(8, 8) == Left(NO_SUCH_FIELD_MSG), // even more so
+        snap.addRook(-3, 2) == Left(NO_SUCH_FIELD_MSG) // must be 0-7
       )
     },
     test("addBishop adds bishop only to empty field within board") {
@@ -111,9 +110,9 @@ object GameSnapSpec extends ZIOSpecDefault {
         snap.addBishop(b1) == Left(FIELD_NOT_VOID_MSG),    // contains bishop already
         snap.addBishop(r1) == Left(FIELD_NOT_VOID_MSG),    // contains rook already
         snap.addBishop(4, 5).isRight,                      // available
-        snap.addBishop(2, 8) == Left(XY_OUT_OF_RANGE_MSG), // 8 is beyond board size
-        snap.addBishop(8, 8) == Left(XY_OUT_OF_RANGE_MSG), // even more soe
-        snap.addBishop(-3, 2) == Left(XY_OUT_OF_RANGE_MSG) // must be 0-7
+        snap.addBishop(2, 8) == Left(NO_SUCH_FIELD_MSG), // 8 is beyond board size
+        snap.addBishop(8, 8) == Left(NO_SUCH_FIELD_MSG), // even more soe
+        snap.addBishop(-3, 2) == Left(NO_SUCH_FIELD_MSG) // must be 0-7
       )
     },
     suite("taking pieces off the board")(

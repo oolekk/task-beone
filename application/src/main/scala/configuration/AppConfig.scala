@@ -22,7 +22,7 @@ case class HttpConfiguration (
 
 object AppConfig extends Configuration {
   def apply(config: Config): AppConfig = {
-    val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("client"))
+    val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("app"))
     configSource.loadOrThrow[AppConfig]
   }
   val configuration: AppConfig = AppConfig(config)

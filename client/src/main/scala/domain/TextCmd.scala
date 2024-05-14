@@ -1,8 +1,8 @@
 package domain
 
-import domain.GameSnap.Error.XY_OUT_OF_RANGE_MSG
+import GameSnap._
 import util.HttpUtil
-import zio.ZIO
+import _root_.zio.ZIO
 
 object TextCmd {
 
@@ -59,26 +59,26 @@ object TextCmd {
       case t @ "save" if t == text.trim => Right(Save)
       case "load"                       => Right(Load(text.drop(4).trim))
       case "r" | "new rook" | "add rook" | "put rook" =>
-        parseDigits(text, 2).map { case List(x, y) => AddRook(x, y) }
+        parseXY(text, 2).map { case List(x, y) => AddRook(x, y) }
       case "b" | "new bishop" | "add bishop" | "put bishop" =>
-        parseDigits(text, 2).map { case List(x, y) => AddBishop(x, y) }
+        parseXY(text, 2).map { case List(x, y) => AddBishop(x, y) }
       case "m" | "mv" | "mov" | "move" =>
-        parseDigits(text, 4).map { case List(x1, y1, x2, y2) => Move((x1, y1), (x2, y2)) }
+        parseXY(text, 4).map { case List(x1, y1, x2, y2) => Move((x1, y1), (x2, y2)) }
       case "t" | "take" | "d" | "delete" | "del" | "rm" | "remove" =>
-        parseDigits(text, 2).map { case List(x, y) => Take(x, y) }
+        parseXY(text, 2).map { case List(x, y) => Take(x, y) }
       case t @ "info" =>
         if (t == text.trim) Right(GameInfo)
-        else parseDigits(text, 1).map { case List(id) => PieceInfo(id) }
+        else parseXY(text, 1).map { case List(id) => PieceInfo(id) }
       case _ => Left(TextCmd.INVALID_COMMAND_MSG)
     }
   }
 
-  private def parseDigits(text: String, n: Int, min: Int = 0, max: Int = 7): Either[String, List[Int]] = {
+  private def parseXY(text: String, n: Int, min: Int = 0, max: Int = 7): Either[String, List[Int]] = {
     val digits = text.filter(_.isDigit).map(d => ("" + d).toInt)
     Either.cond(
       digits.length == n && digits.forall(d => d >= min && d <= max),
       digits.toList,
-      XY_OUT_OF_RANGE_MSG
+      Error.NO_SUCH_FIELD_MSG
     )
   }
 
