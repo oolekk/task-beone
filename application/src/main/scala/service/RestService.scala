@@ -1,7 +1,7 @@
 package service
 
 import configuration.AppConfig
-import domain.HexList
+import domain.{HexList, SnapCmd, SnapCmds}
 import sttp.apispec.openapi.circe.yaml._
 import sttp.tapir.PublicEndpoint
 import sttp.tapir.docs.openapi._
@@ -36,19 +36,16 @@ object RestService extends ZIOAppDefault {
       statusMsg <- ZIO.succeed("SERVICE IS UP")
     } yield statusMsg
 
-  private val rookValidAdd: RestPoint[(String, String, Int), Unit] =
-    endpoint.get.in("diff" / "rook" / "valid" / "add" / path[String] / path[String] / path[Int])
-  private val rookValidTake: RestPoint[(String, String, Int), Unit] =
-    endpoint.get.in("diff" / "rook" / "valid" / "take" / path[String] / path[String] / path[Int])
-  private val rookValidMoveEndpoint: RestPoint[(String, String, Int, Int), Unit] =
-    endpoint.get.in("diff" / "rook" / "valid" / "move" / path[String] / path[String] / path[Int] / path[Int])
-
-  private val bishopValidAdd: RestPoint[(String, String, Int), Unit] =
-    endpoint.get.in("diff" / "bishop" / "valid" / "add" / path[String] / path[String] / path[Int])
-  private val bishopValidTake: RestPoint[(String, String, Int), Unit] =
-    endpoint.get.in("diff" / "bishop" / "valid" / "take" / path[String] / path[String] / path[Int])
-  private val bishopValidMoveEndpoint: RestPoint[(String, String, Int, Int), Unit] =
-    endpoint.get.in("diff" / "bishop" / "valid" / "move" / path[String] / path[String] / path[Int] / path[Int])
+  private val safePushEndpoint: RestPoint[(String, String, SnapCmds), Long] =
+    endpoint.post
+      .in("safe-push" / path[String] / path[String])
+      .in(jsonBody[SnapCmds])
+      .out(jsonBody[Long])
+  private def safePushLogic(gameId: String, round: String, cmds: List[SnapCmd]): ZIO[Any, Nothing, Long] =
+    RedisService
+      .safePush(gameId, round, cmds)
+      .provideLayer(redis)
+      .orElseSucceed(-1)
 
   private val loadSnapsEndpoint: RestPoint[String, HexList] =
     endpoint.get.in("snap" / "load" / path[String]).out(jsonBody[HexList])
@@ -59,27 +56,10 @@ object RestService extends ZIOAppDefault {
       .orElse(ZIO.succeed(HexList()))
       .provideLayer(redis)
 
-  private val saveSnapsEndpoint: RestPoint[(String, String, HexList), Long] =
-    endpoint.post
-      .in("snap" / "save" / path[String] / path[String])
-      .in(jsonBody[HexList])
-      .out(jsonBody[Long])
-
-  private def saveSnapsLogic(gameId: String, round: String, hexList: HexList): ZIO[Any, Nothing, Long] = {
-    ZIO
-      .succeed(scala.util.Try { round.toLong } getOrElse 0L)
-      .flatMap { round =>
-        RedisService
-          .saveHexSnaps(gameId, round, hexList)
-          .orElse(ZIO.succeed(0L))
-      }
-      .provideLayer(redis)
-  }
-
   private val appRoutes = List(
     appStatusCheck.zServerLogic(_ => appStatusLogic()),
-    saveSnapsEndpoint.zServerLogic { case (gameId, round, hexList) =>
-      saveSnapsLogic(gameId, round, hexList)
+    safePushEndpoint.zServerLogic { case (gameId, round, cmds) =>
+      safePushLogic(gameId, round, cmds.cmds)
     },
     loadSnapsEndpoint.zServerLogic { gameId => loadSnapsLogic(gameId) }
   )

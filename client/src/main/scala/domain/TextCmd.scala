@@ -1,6 +1,6 @@
 package domain
 
-import zio.{Scope, ZIO, ZIOAppArgs}
+import zio._
 import domain.GameSnap._
 import domain.LogEntry._
 import util.HttpUtil
@@ -70,7 +70,8 @@ object TextCmd {
       nextSnap <- game.snap.addRook(xy)
       rat      = RoundXY(game.round, xy)
       nextLogs = GameLog(Rook(game.nextId, rat, rat, List(xy)) :: game.logs.on, game.logs.off)
-      nextGame = game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+      cmds     = RookAdded(xy) :: game.pending
+      nextGame = game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs, pending = cmds)
     } yield nextGame
 
   private def applyAddBishop(game: Game, xy: (Int, Int)) =
@@ -78,7 +79,8 @@ object TextCmd {
       nextSnap <- game.snap.addBishop(xy)
       rat      = RoundXY(game.round, xy)
       nextLogs = GameLog(Bishop(game.nextId, rat, rat, List(xy)) :: game.logs.on, game.logs.off)
-      nextGame = game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+      cmds     = BishopAdded(xy) :: game.pending
+      nextGame = game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs, pending = cmds)
     } yield nextGame
 
   private def applyMove(game: Game, xyOld: (Int, Int), xyNew: (Int, Int)) =
@@ -87,28 +89,32 @@ object TextCmd {
       val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
       val nextLog           = Rook(log.id, log.firstAt, RoundXY(game.round, xyNew), xyNew :: log.moves)
       val nextLogs          = GameLog(pre ::: nextLog :: aft, game.logs.off)
-      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+      val cmds              = RookMoved(xyOld, xyNew) :: game.pending
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs, pending = cmds)
     } orElse game.snap.moveBishop(xyOld, xyNew).map { nextSnap =>
       val logIdx            = game.logs.on.indexWhere(_.lastAt.at == rawIndex(xyOld))
       val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
       val nextLog           = Bishop(log.id, log.firstAt, RoundXY(game.round, xyNew), xyNew :: log.moves)
       val nextLogs          = GameLog(pre ::: nextLog :: aft, game.logs.off)
-      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+      val cmds              = BishopMoved(xyOld, xyNew) :: game.pending
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs, pending = cmds)
     } orElse Left(GameSnap.Error.PIECE_NOT_THERE_MSG)
 
-  private def applyTake(game: Game, xy: (Int, Int)) =
+  private def applyTake(game: Game, xy: (Int, Int)): Either[String, Game] =
     game.snap.takeRook(xy).map { nextSnap =>
       val logIdx            = game.logs.on.indexWhere(_.lastAt.at == rawIndex(xy))
       val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
       val nextLog           = Rook(log.id, log.firstAt, RoundXY(game.round, xy), log.moves)
       val nextLogs          = GameLog(pre ::: aft, nextLog :: game.logs.off)
-      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
-    } orElse game.snap.takeRook(xy).map { nextSnap =>
+      val cmds              = RookTaken(xy) :: game.pending
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs, pending = cmds)
+    } orElse game.snap.takeBishop(xy).map { nextSnap =>
       val logIdx            = game.logs.on.indexWhere(_.lastAt.at == rawIndex(xy))
       val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
-      val nextLog           = Rook(log.id, log.firstAt, RoundXY(game.round, xy), log.moves)
+      val nextLog           = Bishop(log.id, log.firstAt, RoundXY(game.round, xy), log.moves)
       val nextLogs          = GameLog(pre ::: aft, nextLog :: game.logs.off)
-      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+      val cmds              = BishopTaken(xy) :: game.pending
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs, pending = cmds)
     } orElse Left(GameSnap.Error.PIECE_NOT_THERE_MSG)
 
   private def parseXY(text: String, n: Int, min: Int = 0, max: Int = 7): Either[String, List[Int]] = {

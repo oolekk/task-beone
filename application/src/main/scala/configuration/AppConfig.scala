@@ -5,6 +5,14 @@ import pureconfig.ConfigObjectSource
 import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 
+object AppConfig extends Configuration {
+  def apply(config: Config): AppConfig = {
+    val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("app"))
+    configSource.loadOrThrow[AppConfig]
+  }
+  lazy val configuration: AppConfig = AppConfig(config)
+}
+
 case class AppConfig(
   kafka: KafkaConfiguration,
   http: HttpConfiguration
@@ -20,10 +28,3 @@ case class HttpConfiguration (
   port: Int
 )
 
-object AppConfig extends Configuration {
-  def apply(config: Config): AppConfig = {
-    val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("app"))
-    configSource.loadOrThrow[AppConfig]
-  }
-  val configuration: AppConfig = AppConfig(config)
-}

@@ -5,6 +5,14 @@ import pureconfig.ConfigObjectSource
 import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 
+object ClientConfig extends Configuration {
+  def apply(config: Config): ClientConfig = {
+    val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("client"))
+    configSource.loadOrThrow[ClientConfig]
+  }
+  lazy val configuration: ClientConfig = ClientConfig(config)
+}
+
 case class ClientConfig(
   kafka: KafkaConfiguration,
   rest: RestConfiguration
@@ -17,20 +25,7 @@ case class KafkaConfiguration(
 )
 case class RestConfiguration(
   statusUrl: String,
-  addRookUrl: String,
-  takeRookUrl: String,
-  moveRookUrl: String,
-  addBishopUrl: String,
-  takeBishopUrl: String,
-  moveBishopUrl: String,
+  safePushUrl: String,
   loadGameUrl: String,
   saveGameUrl: String
 )
-
-object ClientConfig extends Configuration {
-  def apply(config: Config): ClientConfig = {
-    val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("client"))
-    configSource.loadOrThrow[ClientConfig]
-  }
-  val configuration: ClientConfig = ClientConfig(config)
-}
