@@ -1,14 +1,11 @@
 package domain
 
-import GameSnap._
+import zio.{Scope, ZIO, ZIOAppArgs}
+import domain.GameSnap._
+import domain.LogEntry._
 import util.HttpUtil
-import _root_.zio.ZIO
 
 object TextCmd {
-
-  val PROMPT                      = ">"
-  val COMMAND_PROMPT_WELCOME      = "TYPE COMMANDS AFTER PROMPT"
-  private val INVALID_COMMAND_MSG = "Invalid command!"
 
   sealed trait TextCmd
   sealed trait Update // mark commands which update the game board
@@ -26,29 +23,24 @@ object TextCmd {
   case class AddBishop(at: (Int, Int))              extends TextCmd with Update
   case class Move(from: (Int, Int), to: (Int, Int)) extends TextCmd with Update
 
-  def applyToGame(cmd: TextCmd, game: Game) = cmd match {
+  val PROMPT                      = ">"
+  val COMMAND_PROMPT_WELCOME      = "TYPE COMMANDS AFTER PROMPT"
+  private val INVALID_COMMAND_MSG = "Invalid command!"
+
+  def applyToGame(cmd: TextCmd, game: Game): ZIO[ZIOAppArgs with Scope, String, Game] = cmd match {
     case c: Update => ZIO.fromEither(applyUpdate(c, game))
     case Load(gameId) =>
-      for {snaps <- HttpUtil.load(gameId); size = snaps.size} yield Game(gameId, size, size, snaps.reverse)
-    case Save                    => for { savedAt <- HttpUtil.save(game)} yield game.copy(saved = savedAt)
-    case Rand                    => ZIO.fromEither(Right(Game.rand))
-    case GameInfo | PieceInfo(_) => ZIO.fromEither(game.updateLog)
-    case _                       => ZIO.fromEither(Right(game))
+      for { snaps <- HttpUtil.load(gameId); size = snaps.size } yield Game(gameId, size, size, snaps.reverse)
+    case Save => for { savedAt <- HttpUtil.save(game) } yield game.copy(saved = savedAt)
+    case Rand => ZIO.fromEither(Right(Game.rand))
+    case _    => ZIO.fromEither(Right(game))
   }
 
-  def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {
-    case AddBishop(xy) =>
-      game.snap.addBishop(xy).map(nextSnap => game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps))
-    case AddRook(xy) =>
-      game.snap.addRook(xy).map(nextSnap => game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps))
-    case Move(xyOld, xyNew) =>
-      game.snap
-        .movePiece(xyOld, xyNew)
-        .map(nextSnap => game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps))
-    case Take(xy) =>
-      game.snap.takePiece(xy).map { nextSnap =>
-        game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps)
-      }
+  private def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {
+    case AddRook(xy)        => applyAddRook(game, xy)
+    case AddBishop(xy)      => applyAddBishop(game, xy)
+    case Take(xy)           => applyTake(game, xy)
+    case Move(xyOld, xyNew) => applyMove(game, xyOld, xyNew)
   }
 
   def parse(text: String): Either[String, TextCmd] = {
@@ -72,6 +64,52 @@ object TextCmd {
       case _ => Left(TextCmd.INVALID_COMMAND_MSG)
     }
   }
+
+  private def applyAddRook(game: Game, xy: (Int, Int)) =
+    for {
+      nextSnap <- game.snap.addRook(xy)
+      rat      = RoundXY(game.round, xy)
+      nextLogs = GameLog(Rook(game.nextId, rat, rat, List(xy)) :: game.logs.on, game.logs.off)
+      nextGame = game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+    } yield nextGame
+
+  private def applyAddBishop(game: Game, xy: (Int, Int)) =
+    for {
+      nextSnap <- game.snap.addBishop(xy)
+      rat      = RoundXY(game.round, xy)
+      nextLogs = GameLog(Bishop(game.nextId, rat, rat, List(xy)) :: game.logs.on, game.logs.off)
+      nextGame = game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+    } yield nextGame
+
+  private def applyMove(game: Game, xyOld: (Int, Int), xyNew: (Int, Int)) =
+    game.snap.moveRook(xyOld, xyNew).map { nextSnap =>
+      val logIdx            = game.logs.on.indexWhere(_.lastAt.at == rawIndex(xyOld))
+      val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
+      val nextLog           = Rook(log.id, log.firstAt, RoundXY(game.round, xyNew), xyNew :: log.moves)
+      val nextLogs          = GameLog(pre ::: nextLog :: aft, game.logs.off)
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+    } orElse game.snap.moveBishop(xyOld, xyNew).map { nextSnap =>
+      val logIdx            = game.logs.on.indexWhere(_.lastAt.at == rawIndex(xyOld))
+      val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
+      val nextLog           = Bishop(log.id, log.firstAt, RoundXY(game.round, xyNew), xyNew :: log.moves)
+      val nextLogs          = GameLog(pre ::: nextLog :: aft, game.logs.off)
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+    } orElse Left(GameSnap.Error.PIECE_NOT_THERE_MSG)
+
+  private def applyTake(game: Game, xy: (Int, Int)) =
+    game.snap.takeRook(xy).map { nextSnap =>
+      val logIdx            = game.logs.on.indexWhere(_.lastAt.at == rawIndex(xy))
+      val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
+      val nextLog           = Rook(log.id, log.firstAt, RoundXY(game.round, xy), log.moves)
+      val nextLogs          = GameLog(pre ::: aft, nextLog :: game.logs.off)
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+    } orElse game.snap.takeRook(xy).map { nextSnap =>
+      val logIdx            = game.logs.on.indexWhere(_.lastAt.at == rawIndex(xy))
+      val (pre, log :: aft) = game.logs.on.splitAt(logIdx)
+      val nextLog           = Rook(log.id, log.firstAt, RoundXY(game.round, xy), log.moves)
+      val nextLogs          = GameLog(pre ::: aft, nextLog :: game.logs.off)
+      game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs)
+    } orElse Left(GameSnap.Error.PIECE_NOT_THERE_MSG)
 
   private def parseXY(text: String, n: Int, min: Int = 0, max: Int = 7): Either[String, List[Int]] = {
     val digits = text.filter(_.isDigit).map(d => ("" + d).toInt)
