@@ -16,28 +16,31 @@ object HttpUtil {
   private def failedReadMsg(pre: String)   = s"$pre failed to read response!"
   private def failedDecodeMsg(pre: String) = s"$pre failed to decode response!"
 
-  def push(game: Game): ZIO[ZIOAppArgs & Scope, String, Int] = {
-    val cmds: SnapCmds = SnapCmds(
-      game.pending
-        .zip(game.snaps.take(game.pending.size))
-        .reverse
-        .map { case (cmd, snap) => SnapCmd(cmd, snap) }
-    )
-    for {
-      resp <- Client
-        .request(
-          Request.post(
-            path = s"${configuration.rest.safePushUrl}/${game.id}/${game.saved}",
-            body = Body.fromString(SnapCmds.encoder.encodeJson(cmds).toString)
-          )
-        )
-        .timeoutFail(timeoutMsg("Push"))(TIMEOUT)
-        .provide(Client.default, Scope.default)
-        .orElseFail(failedFetchMsg("Push"))
-      body      <- resp.body.asString.orElseFail(failedReadMsg("Push"))
-      updatedAt <- ZIO.attempt(body.toInt).orElseFail(failedDecodeMsg("Push"))
-    } yield updatedAt
-  }
+  def push(game: Game): ZIO[ZIOAppArgs & Scope, String, Int] =
+    if (game.pending.isEmpty) ZIO.succeed(0)
+    else {
+      val cmds: SnapCmds = SnapCmds(
+        game.pending
+          .zip(game.snaps.take(game.pending.size))
+          .reverse
+          .map { case (cmd, snap) => SnapCmd(cmd, snap) }
+      )
+      for {
+        resp <- Client
+          .request {
+            val offset = game.round - game.pending.size
+            Request.post(
+              path = s"${configuration.rest.safePushUrl}/${game.id}/$offset",
+              body = Body.fromString(SnapCmds.encoder.encodeJson(cmds).toString)
+            )
+          }
+          .timeoutFail(timeoutMsg("Push"))(TIMEOUT)
+          .provide(Client.default, Scope.default)
+          .orElseFail(failedFetchMsg("Push"))
+        body      <- resp.body.asString.orElseFail(failedReadMsg("Push"))
+        updatedAt <- ZIO.attempt(body.toInt).orElseFail(failedDecodeMsg("Push"))
+      } yield updatedAt
+    }
 
   def load(gameId: String): ZIO[ZIOAppArgs & Scope, String, List[GameSnap]] = {
     for {
