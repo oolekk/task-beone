@@ -2,7 +2,7 @@ package app
 
 import domain.TextCmd._
 import domain._
-import util.HttpUtil
+import util.{CmdParser, HttpUtil}
 import zio.Console._
 import zio._
 
@@ -18,7 +18,7 @@ object GameApp extends ZIOAppDefault {
 
   private def repl(game: Game): ZIO[ZIOAppArgs & Scope, Throwable, Unit] = {
     for {
-      cmdOpt <- readLine.map(TextCmd.parse)
+      cmdOpt <- readLine.map(line => CmdParser.parse(line, game))
       _ <- ZIO.unless(cmdOpt.contains(TextCmd.Exit)) {
         for {
           _   <- print(cmdOpt.map(_.toString + "\n").getOrElse(""))
@@ -43,7 +43,7 @@ object GameApp extends ZIOAppDefault {
     .push(game)
     .flatMap(diffCount =>
       if (diffCount < 0) {
-        ZIO.fail(s"Change not accepted, ${-diffCount} items discarded!" + diffCount)
+        ZIO.fail(s"Change not accepted, ${-diffCount} items discarded!")
       } else {
         ZIO.succeed(game.copy(pending = Nil))
       }
