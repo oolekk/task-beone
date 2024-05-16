@@ -1,10 +1,24 @@
 package domain
 
+import domain.LogEntry.{Bishop, Rook, RoundXY}
+
 case class GameLog(on: List[LogEntry], off: List[LogEntry])
 
 object GameLog {
 
   val empty: GameLog = GameLog(Nil, Nil)
+
+  def fresh(snap: GameSnap): GameLog = {
+    import util.LongBitOps._
+    GameLog(
+      snap.allPieces.find1s.zipWithIndex.map { case (at, idx) =>
+        val rxy = RoundXY(0, at)
+        if (snap.rooks.getBool(at)) Rook(idx + 1, rxy, rxy, List(at))
+        else Bishop(idx + 1, rxy, rxy, List(at))
+      },
+      Nil
+    )
+  }
 
   implicit class GameLogOps(gameLog: GameLog) {
 
@@ -28,7 +42,6 @@ object GameLog {
     private def findOffBoard(id: Int): Option[LogEntry] = gameLog.off.find(_.id == id)
     private def findOnBoard(id: Int): Option[LogEntry]  = gameLog.on.find(_.id == id)
 
-    def find(id: Int): Option[LogEntry] = findOnBoard(id) orElse findOffBoard(id)
   }
 
 }

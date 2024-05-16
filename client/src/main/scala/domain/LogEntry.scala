@@ -32,7 +32,7 @@ sealed trait LogEntry {
       (if (onBoard) ON_BOARD_SUFFIX else OFF_BOARD_SUFFIX)
   }
 
-  def distance: Int = (moves.sliding(2, 1) collect { case List(i, j) =>
+  private def distance: Int = (moves.sliding(2, 1) collect { case List(i, j) =>
     if (i / 8 == j / 8) (j - i).abs            // horizontal distance
     else if ((j - i) % 9 == 0) (j - i).abs / 9 // diagonal \\ distance
     else if (i % 8 == j % 8) (j - i).abs / 8   // vertical distance

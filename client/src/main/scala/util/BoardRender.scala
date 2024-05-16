@@ -4,7 +4,7 @@ import domain.GameSnap
 
 import scala.annotation.tailrec
 
-object GameSnapUtil {
+object BoardRender {
 
   import util.LongBitOps._
 

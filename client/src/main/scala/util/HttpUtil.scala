@@ -9,6 +9,13 @@ import java.time.temporal.ChronoUnit.SECONDS
 
 object HttpUtil {
 
+  private val TIMEOUT = Duration(3, SECONDS)
+
+  private def timeoutMsg(pre: String)      = s"$pre timed out!"
+  private def failedFetchMsg(pre: String)  = s"$pre failed to fetch response!"
+  private def failedReadMsg(pre: String)   = s"$pre failed to read response!"
+  private def failedDecodeMsg(pre: String) = s"$pre failed to decode response!"
+
   def push(game: Game): ZIO[ZIOAppArgs & Scope, String, Int] = {
     val cmds: SnapCmds = SnapCmds(
       game.pending
@@ -16,22 +23,19 @@ object HttpUtil {
         .reverse
         .map { case (cmd, snap) => SnapCmd(cmd, snap) }
     )
-    val payload = SnapCmds.encoder.encodeJson(cmds).toString
     for {
       resp <- Client
         .request(
           Request.post(
             path = s"${configuration.rest.safePushUrl}/${game.id}/${game.saved}",
-            body = Body.fromString(payload)
+            body = Body.fromString(SnapCmds.encoder.encodeJson(cmds).toString)
           )
         )
-        .timeoutFail("Update timed out!")(Duration(3, SECONDS))
+        .timeoutFail(timeoutMsg("Push"))(TIMEOUT)
         .provide(Client.default, Scope.default)
-        .orElseFail("Update failed to fetch response!")
-      body <- resp.body.asString.orElseFail("Update failed to read response!")
-      updatedAt <- ZIO
-        .attempt(body.toInt)
-        .orElseFail("Update failed to decode response!")
+        .orElseFail(failedFetchMsg("Push"))
+      body      <- resp.body.asString.orElseFail(failedReadMsg("Push"))
+      updatedAt <- ZIO.attempt(body.toInt).orElseFail(failedDecodeMsg("Push"))
     } yield updatedAt
   }
 
@@ -41,40 +45,13 @@ object HttpUtil {
         .request(
           Request.get(s"${configuration.rest.loadGameUrl}/$gameId")
         )
-        .timeoutFail("Load timed out!")(Duration(3, SECONDS))
+        .timeoutFail(timeoutMsg("Load"))(TIMEOUT)
         .provide(Client.default, Scope.default)
-        .mapError(err => "Load failed to fetch response!")
-      str <- resp.body.asString
-        .mapError(err => "Load failed to read response!")
-      hexList <- ZIO
-        .fromEither(HexList.decoder.decodeJson(str))
-        .mapError(err => "Load failed to decode response!")
-      snaps <- ZIO
-        .foreach(hexList.hxs)(hex => GameSnap.zioFromHex(hex))
-        .mapError(err => "Load failed to decode snaps!")
+        .orElseFail(failedFetchMsg("Load"))
+      str     <- resp.body.asString.orElseFail(failedReadMsg("Load"))
+      hexList <- ZIO.fromEither(HexList.decoder.decodeJson(str)).orElseFail(failedDecodeMsg("Load HexList"))
+      snaps   <- ZIO.foreach(hexList.hxs)(hex => GameSnap.zioFromHex(hex)).orElseFail(failedDecodeMsg("Load GameSnap"))
     } yield snaps
-  }
-
-  def save(game: Game): ZIO[ZIOAppArgs & Scope, String, Int] = {
-    val unsaved = game.snaps.take(game.round - game.saved)
-    val payload = HexList.encoder.encodeJson(HexList(unsaved.map(_.asHexStr))).toString
-    for {
-      resp <- Client
-        .request(
-          Request.post(
-            path = s"${configuration.rest.saveGameUrl}/${game.id}/${game.saved}",
-            body = Body.fromString(payload)
-          )
-        )
-        .timeoutFail("Save timed out!")(Duration(3, SECONDS))
-        .provide(Client.default, Scope.default)
-        .mapError(err => "Save failed to fetch response!")
-      body <- resp.body.asString
-        .mapError(err => "Save failed to read response!")
-      savedAt <- ZIO
-        .attempt(body.toInt)
-        .mapError(err => "Save failed to decode response! " + err)
-    } yield savedAt
   }
 
 }

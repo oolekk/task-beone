@@ -11,12 +11,13 @@ object RedisService {
   implicit val stringIn: Input[String] = StringInput
   implicit val longOut: Output[Long]   = LongOutput
 
-  def safePush(gameId: String, round: String, cmds: List[SnapCmd]): ZIO[Redis, RedisError, Long] = {
+  def pushIfValid(gameId: String, round: String, cmds: List[SnapCmd]): ZIO[Redis, RedisError, Long] = {
+    // validation: last stored snap must match the next one with the move reverted
     collectArgs(round, cmds) collect { case (intRound, prevSnap) =>
-      RedisService.pushIfValid(gameId, intRound, prevSnap, cmds.map(_.snap))
+      RedisService.validatedPush(gameId, intRound, prevSnap, cmds.map(_.snap))
     } getOrElse ZIO.succeed(-1)
   }
-  private def collectArgs(round: String, cmds: List[SnapCmd]) = for {
+  private def collectArgs(round: String, cmds: List[SnapCmd]): Option[(Int, GameSnap)] = for {
     intRound                    <- round.toIntOption
     SnapCmd(firstCmd, nextSnap) <- cmds.headOption
     prevSnap                    <- nextSnap.revert(firstCmd).toOption
@@ -27,9 +28,6 @@ object RedisService {
   def loadHexSnaps(gameId: String): ZIO[Redis, RedisError, HexList] =
     pullListItems(gameId, 0 to -1).map(HexList(_))
 
-  def saveHexSnaps(gameId: String, round: Long, hexList: HexList): ZIO[Redis, RedisError, Long] =
-    pushStringsGetNewCount(gameId, round, hexList.hxs)
-
   def saveGameSnaps(gameId: String, round: Long, items: List[GameSnap]): ZIO[Redis, RedisError, Long] =
     pushStringsGetNewCount(gameId, round, items.map(_.asHexStr))
 
@@ -39,7 +37,7 @@ object RedisService {
       items <- redis.lRange(key, range).returning[String]
     } yield items.toList
 
-  private def pushIfValid(
+  private def validatedPush(
     key: String,
     round: Long,
     prevSnap: GameSnap,

@@ -10,7 +10,7 @@ object ClientConfig extends Configuration {
     val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("client"))
     configSource.loadOrThrow[ClientConfig]
   }
-  lazy val configuration: ClientConfig = ClientConfig(config)
+  val configuration: ClientConfig = ClientConfig(config)
 }
 
 case class ClientConfig(
@@ -26,6 +26,5 @@ case class KafkaConfiguration(
 case class RestConfiguration(
   statusUrl: String,
   safePushUrl: String,
-  loadGameUrl: String,
-  saveGameUrl: String
+  loadGameUrl: String
 )

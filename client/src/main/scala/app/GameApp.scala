@@ -23,16 +23,23 @@ object GameApp extends ZIOAppDefault {
         for {
           _    <- print(cmdOpt.map(_.toString + "\n").getOrElse(""))
           cmd  <- ZIO.fromEither(cmdOpt) orElse ZIO.succeed(Noop)
-          next <- TextCmd.applyToGame(cmd, game) orElse ZIO.succeed(game)
+          // try to apply change to the previous game state, print error and fallback to existing state otherwise
+          next <- TextCmd.applyCommand(cmd, game).foldZIO(err => printLine(err).as(game), next => ZIO.succeed(next))
           nextOrSaved <- cmdOpt match {
+            case Left(err) => for { _ <- printLine(err) } yield next // inform if can't parse cmd
             case Right(_: Update) =>
               for {
-                update <- HttpUtil.push(next).orElseSucceed(-1)
+                update <- HttpUtil.push(next).orElseSucceed(-next.pending.size)
+                // continue playing even if push failed, push all outstanding moves on next move
                 savedGame = if (update > 0) next.copy(pending = Nil, saved = next.round) else next
                 _ <- printLine("Pushed " + savedGame.noopInfo)
               } yield savedGame
+            case Right(Rand) => // save it only after first move, same like with new empty game
+              for {
+                randGame <- ZIO.succeed(Game.rand)
+                _        <- printLine(randGame.noopInfo)
+              } yield randGame
             case Right(Load(_))       => for { _ <- printLine(next.loadInfo) } yield next
-            case Right(Save)          => for { _ <- printLine(next.saveInfo) } yield next
             case Right(GameInfo)      => for { _ <- printLine(next.descAllInfo) } yield next
             case Right(PieceInfo(id)) => for { _ <- printLine(next.descOneInfo(id)) } yield next
             case _                    => for { _ <- printLine(next.noopInfo) } yield next

@@ -7,48 +7,12 @@ import util.HttpUtil
 
 object TextCmd {
 
-  sealed trait TextCmd
-  sealed trait Update // mark commands which update the game board
-
-  case object Exit                     extends TextCmd
-  case object Noop                     extends TextCmd
-  case object Rand                     extends TextCmd
-  case object Save                     extends TextCmd
-  case class Load(gameId: String = "") extends TextCmd
-  case object GameInfo                 extends TextCmd
-  case class PieceInfo(id: Int)        extends TextCmd
-
-  case class Take(from: (Int, Int))                 extends TextCmd with Update
-  case class AddRook(at: (Int, Int))                extends TextCmd with Update
-  case class AddBishop(at: (Int, Int))              extends TextCmd with Update
-  case class Move(from: (Int, Int), to: (Int, Int)) extends TextCmd with Update
-
-  val PROMPT                      = ">"
-  val COMMAND_PROMPT_WELCOME      = "TYPE COMMANDS AFTER PROMPT"
-  private val INVALID_COMMAND_MSG = "Invalid command!"
-
-  def applyToGame(cmd: TextCmd, game: Game): ZIO[ZIOAppArgs with Scope, String, Game] = cmd match {
-    case c: Update => ZIO.fromEither(applyUpdate(c, game))
-    case Load(gameId) =>
-      for { snaps <- HttpUtil.load(gameId); size = snaps.size } yield Game(gameId, size, size, snaps.reverse)
-    case Save => for { savedAt <- HttpUtil.save(game) } yield game.copy(saved = savedAt)
-    case Rand => ZIO.fromEither(Right(Game.rand))
-    case _    => ZIO.fromEither(Right(game))
-  }
-
-  private def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {
-    case AddRook(xy)        => applyAddRook(game, xy)
-    case AddBishop(xy)      => applyAddBishop(game, xy)
-    case Take(xy)           => applyTake(game, xy)
-    case Move(xyOld, xyNew) => applyMove(game, xyOld, xyNew)
-  }
-
   def parse(text: String): Either[String, TextCmd] = {
     text.takeWhile(!_.isWhitespace).toLowerCase.trim match {
       case _ if text.isBlank            => Right(Noop)
       case "exit"                       => Right(Exit)
       case "rand"                       => Right(Rand)
-      case t @ "save" if t == text.trim => Right(Save)
+      case t @ "rand" if t == text.trim => Right(Rand)
       case "load"                       => Right(Load(text.drop(4).trim))
       case "r" | "new rook" | "add rook" | "put rook" =>
         parseXY(text, 2).map { case List(x, y) => AddRook(x, y) }
@@ -63,6 +27,40 @@ object TextCmd {
         else parseXY(text, 1).map { case List(id) => PieceInfo(id) }
       case _ => Left(TextCmd.INVALID_COMMAND_MSG)
     }
+  }
+
+  sealed trait TextCmd
+  sealed trait Update // mark commands which update the game board
+
+  case object Exit                     extends TextCmd
+  case object Noop                     extends TextCmd
+  case object Rand                     extends TextCmd
+  case object GameInfo                 extends TextCmd
+  case class PieceInfo(id: Int)        extends TextCmd
+  case class Load(gameId: String = "") extends TextCmd
+
+  case class Take(from: (Int, Int))                 extends TextCmd with Update
+  case class AddRook(at: (Int, Int))                extends TextCmd with Update
+  case class AddBishop(at: (Int, Int))              extends TextCmd with Update
+  case class Move(from: (Int, Int), to: (Int, Int)) extends TextCmd with Update
+
+  val PROMPT                      = ">"
+  val COMMAND_PROMPT_WELCOME      = "TYPE COMMANDS AFTER PROMPT"
+  private val INVALID_COMMAND_MSG = "Invalid command!"
+
+  def applyCommand(cmd: TextCmd, game: Game): ZIO[ZIOAppArgs with Scope, String, Game] = cmd match {
+    case c: Update => ZIO.fromEither(applyUpdate(c, game))
+    case Load(gameId) =>
+      for { snaps <- HttpUtil.load(gameId); size = snaps.size } yield Game(gameId, size, size, snaps.reverse)
+    case Rand => ZIO.fromEither(Right(Game.rand))
+    case _    => ZIO.fromEither(Right(game))
+  }
+
+  private def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {
+    case AddRook(xy)        => applyAddRook(game, xy)
+    case AddBishop(xy)      => applyAddBishop(game, xy)
+    case Take(xy)           => applyTake(game, xy)
+    case Move(xyOld, xyNew) => applyMove(game, xyOld, xyNew)
   }
 
   private def applyAddRook(game: Game, xy: (Int, Int)) =
@@ -98,7 +96,7 @@ object TextCmd {
       val nextLogs          = GameLog(pre ::: nextLog :: aft, game.logs.off)
       val cmds              = BishopMoved(xyOld, xyNew) :: game.pending
       game.copy(round = game.round + 1, snaps = nextSnap :: game.snaps, logs = nextLogs, pending = cmds)
-    } orElse Left(GameSnap.Error.PIECE_NOT_THERE_MSG)
+    }
 
   private def applyTake(game: Game, xy: (Int, Int)): Either[String, Game] =
     game.snap.takeRook(xy).map { nextSnap =>

@@ -36,19 +36,19 @@ object RestService extends ZIOAppDefault {
       statusMsg <- ZIO.succeed("SERVICE IS UP")
     } yield statusMsg
 
-  private val safePushEndpoint: RestPoint[(String, String, SnapCmds), Long] =
+  private val pushIfValidEndpoint: RestPoint[(String, String, SnapCmds), Long] =
     endpoint.post
-      .in("safe-push" / path[String] / path[String])
+      .in("push" / path[String] / path[String])
       .in(jsonBody[SnapCmds])
       .out(jsonBody[Long])
-  private def safePushLogic(gameId: String, round: String, cmds: List[SnapCmd]): ZIO[Any, Nothing, Long] =
+  private def pushIfValidLogic(gameId: String, round: String, cmds: List[SnapCmd]): ZIO[Any, Nothing, Long] =
     RedisService
-      .safePush(gameId, round, cmds)
+      .pushIfValid(gameId, round, cmds)
       .provideLayer(redis)
-      .orElseSucceed(-1)
+      .orElseSucceed(-cmds.size)
 
   private val loadSnapsEndpoint: RestPoint[String, HexList] =
-    endpoint.get.in("snap" / "load" / path[String]).out(jsonBody[HexList])
+    endpoint.get.in("load" / path[String]).out(jsonBody[HexList])
 
   private def loadSnapsLogic(gameId: String): ZIO[Any, Nothing, HexList] =
     RedisService
@@ -58,8 +58,8 @@ object RestService extends ZIOAppDefault {
 
   private val appRoutes = List(
     appStatusCheck.zServerLogic(_ => appStatusLogic()),
-    safePushEndpoint.zServerLogic { case (gameId, round, cmds) =>
-      safePushLogic(gameId, round, cmds.cmds)
+    pushIfValidEndpoint.zServerLogic { case (gameId, round, cmds) =>
+      pushIfValidLogic(gameId, round, cmds.cmds)
     },
     loadSnapsEndpoint.zServerLogic { gameId => loadSnapsLogic(gameId) }
   )

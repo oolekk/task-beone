@@ -10,7 +10,7 @@ object AppConfig extends Configuration {
     val configSource: ConfigObjectSource = ConfigSource.fromConfig(config.getConfig("app"))
     configSource.loadOrThrow[AppConfig]
   }
-  lazy val configuration: AppConfig = AppConfig(config)
+  val configuration: AppConfig = AppConfig(config)
 }
 
 case class AppConfig(
