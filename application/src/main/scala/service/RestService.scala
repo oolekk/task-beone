@@ -2,6 +2,7 @@ package service
 
 import configuration.AppConfig
 import domain.{HexList, SnapCmd, SnapCmds}
+import service.KafkaProducer.produceBoardCmdRecs
 import sttp.apispec.openapi.circe.yaml._
 import sttp.tapir.PublicEndpoint
 import sttp.tapir.docs.openapi._
@@ -41,9 +42,11 @@ object RestService extends ZIOAppDefault {
       .in("push" / path[String] / path[String])
       .in(jsonBody[SnapCmds])
       .out(jsonBody[Long])
+
   private def pushIfValidLogic(gameId: String, round: String, cmds: List[SnapCmd]): ZIO[Any, Nothing, Long] =
     RedisService
       .pushIfValid(gameId, round, cmds)
+      .tap(offset => ZIO.when(offset > 0)(produceBoardCmdRecs(gameId, cmds).unit))
       .provideLayer(redis)
       .orElseSucceed(-cmds.size)
 

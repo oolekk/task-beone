@@ -21,14 +21,11 @@ object TextCmd {
   case class AddBishop(at: (Int, Int))              extends TextCmd with Update
   case class Move(from: (Int, Int), to: (Int, Int)) extends TextCmd with Update
 
-  val PROMPT                 = ">"
-  val COMMAND_PROMPT_WELCOME = "TYPE COMMANDS AFTER PROMPT"
-
   def applyCommand(cmd: TextCmd, game: Game): ZIO[ZIOAppArgs with Scope, String, Game] = cmd match {
     case c: Update => ZIO.fromEither(applyUpdate(c, game))
     case Load(gameId) =>
       HttpUtil.load(gameId).flatMap { snaps =>
-        ZIO.fromEither(replay(gameId, snaps))
+        ZIO.fromEither(replay(gameId, snaps).map(_.copy(pending = Nil)))
       }
     case Rand => ZIO.fromEither(Right(Game.rand))
     case _    => ZIO.fromEither(Right(game))
@@ -47,7 +44,7 @@ object TextCmd {
       .sliding(2, 1)
       .collect { case List(prev, next) => BoardCmd.resolve(prev, next) }
       .takeWhile(_.isRight)
-      .foldLeft(Option(Game(gameId, 0, snaps, logs)).toRight("Failed to reload!")) { (game, cmd) =>
+      .foldLeft(Option(Game(gameId, 1, snaps, logs)).toRight("Failed to reload!")) { (game, cmd) =>
         cmd match {
           case Left(msg)                    => Left(msg)
           case Right(RookMoved(from, to))   => game.flatMap(_.applyMove(asXY(from), asXY(to)))
@@ -59,6 +56,5 @@ object TextCmd {
         }
       }
   }
-
 
 }

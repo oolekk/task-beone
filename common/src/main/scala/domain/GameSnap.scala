@@ -39,7 +39,7 @@ object GameSnap {
   }
 
   object Error {
-    val NO_SUCH_FIELD_MSG: String        = "No such field on the board!"
+    val NO_SUCH_XY_MSG: String           = "No such XY field on the board!"
     val FIELD_NOT_VOID_MSG: String       = "Field not empty!"
     val ROOK_NOT_THERE_MSG: String       = "Rook not there!"
     val BISHOP_NOT_THERE_MSG: String     = "Bishop not there!"
@@ -170,7 +170,7 @@ object GameSnap {
       bitIndex(at)
         .flatMap(i => Either.cond(!snap.bishops.getBool(i) && !snap.rooks.getBool(i), i, Error.FIELD_NOT_VOID_MSG))
     private def bitIndex(at: Int): Either[String, Int] =
-      Either.cond(at >= 0 && at < LONG_BIT_COUNT, at, Error.NO_SUCH_FIELD_MSG)
+      Either.cond(at >= 0 && at < LONG_BIT_COUNT, at, Error.NO_SUCH_XY_MSG)
   }
 
 }

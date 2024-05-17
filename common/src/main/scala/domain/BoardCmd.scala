@@ -1,7 +1,9 @@
 package domain
 
-import domain.GameSnap.Error.{BISHOP_CANNOT_MOVE_THERE, ROOK_CANNOT_MOVE_THERE}
+import domain.GameSnap.Error._
+import zio.ZIO
 import zio.json._
+import zio.kafka.serde.Serde
 
 case class BishopAdded(at: Int) extends BoardCmd {
   override def invert: BoardCmd = BishopTaken(at)
@@ -32,6 +34,12 @@ object BoardCmd {
 
   implicit val encoder: JsonEncoder[BoardCmd] = DeriveJsonEncoder.gen[BoardCmd]
   implicit val decoder: JsonDecoder[BoardCmd] = DeriveJsonDecoder.gen[BoardCmd]
+
+  val serde: Serde[Any, BoardCmd] = Serde.string.inmapM(string =>
+    ZIO
+      .fromEither(string.fromJson[BoardCmd])
+      .mapError(msg => new RuntimeException(msg))
+  )(cmd => ZIO.from(cmd.toJson))
 
   private val INVALID_ROOK_PLACEMENT    = "Invalid rook placement!"
   private val INVALID_BISHOP_PLACEMENT  = "Invalid bishop placement!"

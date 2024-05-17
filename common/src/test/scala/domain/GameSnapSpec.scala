@@ -37,9 +37,8 @@ object GameSnapSpec extends ZIOSpecDefault {
         hasOverlap = (bs & rs) != 0
       } yield (hasOverlap, Try { GameSnap(rs, bs) })
       assertTrue(
-        trySnaps.forall {
-          case (hasOverlap, trySnap) =>
-            hasOverlap && trySnap.isFailure || !hasOverlap && trySnap.isSuccess
+        trySnaps.forall { case (hasOverlap, trySnap) =>
+          hasOverlap && trySnap.isFailure || !hasOverlap && trySnap.isSuccess
         }
       )
     },
@@ -89,12 +88,12 @@ object GameSnapSpec extends ZIOSpecDefault {
       assertTrue(
         snap.isRook(r1),
         snap.isBishop(b1),
-        snap.addRook(r1) == Left(FIELD_NOT_VOID_MSG),    // contains rook already
-        snap.addRook(b1) == Left(FIELD_NOT_VOID_MSG),    // contains bishop
-        snap.addRook(4, 5).isRight,                      // available
-        snap.addRook(2, 8) == Left(NO_SUCH_FIELD_MSG), // 8 is beyond board size
-        snap.addRook(8, 8) == Left(NO_SUCH_FIELD_MSG), // even more so
-        snap.addRook(-3, 2) == Left(NO_SUCH_FIELD_MSG) // must be 0-7
+        snap.addRook(r1) == Left(FIELD_NOT_VOID_MSG), // contains rook already
+        snap.addRook(b1) == Left(FIELD_NOT_VOID_MSG), // contains bishop
+        snap.addRook(4, 5).isRight,                   // available
+        snap.addRook(2, 8) == Left(NO_SUCH_XY_MSG),   // 8 is beyond board size
+        snap.addRook(8, 8) == Left(NO_SUCH_XY_MSG),   // even more so
+        snap.addRook(-3, 2) == Left(NO_SUCH_XY_MSG)   // must be 0-7
       )
     },
     test("addBishop adds bishop only to empty field within board") {
@@ -107,12 +106,12 @@ object GameSnapSpec extends ZIOSpecDefault {
       assertTrue(
         snap.isBishop(b1),
         snap.isRook(r1),
-        snap.addBishop(b1) == Left(FIELD_NOT_VOID_MSG),    // contains bishop already
-        snap.addBishop(r1) == Left(FIELD_NOT_VOID_MSG),    // contains rook already
-        snap.addBishop(4, 5).isRight,                      // available
-        snap.addBishop(2, 8) == Left(NO_SUCH_FIELD_MSG), // 8 is beyond board size
-        snap.addBishop(8, 8) == Left(NO_SUCH_FIELD_MSG), // even more soe
-        snap.addBishop(-3, 2) == Left(NO_SUCH_FIELD_MSG) // must be 0-7
+        snap.addBishop(b1) == Left(FIELD_NOT_VOID_MSG), // contains bishop already
+        snap.addBishop(r1) == Left(FIELD_NOT_VOID_MSG), // contains rook already
+        snap.addBishop(4, 5).isRight,                   // available
+        snap.addBishop(2, 8) == Left(NO_SUCH_XY_MSG),   // 8 is beyond board size
+        snap.addBishop(8, 8) == Left(NO_SUCH_XY_MSG),   // even more soe
+        snap.addBishop(-3, 2) == Left(NO_SUCH_XY_MSG)   // must be 0-7
       )
     },
     suite("taking pieces off the board")(
@@ -128,7 +127,7 @@ object GameSnapSpec extends ZIOSpecDefault {
           snap.takeRook(r1).isRight,                           // available and taken
           snap.isRook(r2),                                     // it was there ...
           snap.takeRook(r2).map(_.isRook(r2)).contains(false), // it is gone now
-          snap.takeRook(2, 4) == Left(ROOK_NOT_THERE_MSG),     // there is no rook there
+          snap.takeRook(2, 4) == Left(PIECE_NOT_THERE_MSG),    // there is no rook there
           snap.takeRook(b1) == Left(ROOK_NOT_THERE_MSG)        // there is bishop not rook there
         )
       },
@@ -144,7 +143,7 @@ object GameSnapSpec extends ZIOSpecDefault {
           snap.takeBishop(b1).isRight,                             // available and taken
           snap.isBishop(b2),                                       // it was there ...
           snap.takeBishop(b2).map(_.isBishop(b2)).contains(false), // it is gone now
-          snap.takeBishop(2, 4) == Left(BISHOP_NOT_THERE_MSG),     // there is no rook there
+          snap.takeBishop(2, 4) == Left(PIECE_NOT_THERE_MSG),      // there is no rook there
           snap.takeBishop(r1) == Left(BISHOP_NOT_THERE_MSG)        // there is rook not bishop there
         )
 
@@ -256,9 +255,9 @@ object GameSnapSpec extends ZIOSpecDefault {
         )
 
         val voidChecks = assertTrue {
-          snap.moveRook((0, 0), (0, 1)) == Left(ROOK_NOT_THERE_MSG) && // can't move rook from empty field
-          snap.moveRook(b1, (7, 6)) == Left(ROOK_NOT_THERE_MSG) &&     // can't move rook from field with bishop
-          snap.moveRook(r1, b3) == Left(FIELD_NOT_VOID_MSG)            // can't move rook on non-empty field
+          snap.moveRook((0, 0), (0, 1)) == Left(PIECE_NOT_THERE_MSG) && // can't move rook from empty field
+          snap.moveRook(b1, (7, 6)) == Left(ROOK_NOT_THERE_MSG) &&      // can't move rook from field with bishop
+          snap.moveRook(r1, b3) == Left(FIELD_NOT_VOID_MSG)             // can't move rook on non-empty field
         }
 
         colChecks && rowChecks && voidChecks
@@ -326,9 +325,9 @@ object GameSnapSpec extends ZIOSpecDefault {
         )
 
         assertTrue(
-//          snap0.moveBishop((0, 0), (1, 1)) == Left(BISHOP_NOT_THERE_MSG) && // can't move bishop from empty field
-          snap0.moveBishop(r1, (6, 6)) == Left(BISHOP_NOT_THERE_MSG) && // can't move bishop from field with rook
-            snap0.moveBishop(b1, r3) == Left(FIELD_NOT_VOID_MSG)        // can't move bishop on non-empty field
+          snap0.moveBishop((0, 0), (1, 1)) == Left(PIECE_NOT_THERE_MSG) && // can't move bishop from empty field
+            snap0.moveBishop(r1, (6, 6)) == Left(BISHOP_NOT_THERE_MSG) &&  // can't move bishop from field with rook
+            snap0.moveBishop(b1, r3) == Left(FIELD_NOT_VOID_MSG)           // can't move bishop on non-empty field
         )
 
       },

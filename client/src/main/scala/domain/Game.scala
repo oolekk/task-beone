@@ -3,25 +3,30 @@ package domain
 import util.BoardRender
 import util.LongBitOps._
 import domain.GameSnap._
+import domain.LogEntry.{Bishop, Rook}
 
 import scala.util.Random.nextLong
 
-case class Game(
+case class Game private (
   id: String,
-  round: Int = 0,
-  snaps: List[GameSnap] = Nil,
+  round: Int,
+  snaps: List[GameSnap] = List(GameSnap.empty),
   logs: GameLog = GameLog.empty,
   pending: List[BoardCmd] = Nil
 )
 
 object Game {
 
-  def init: Game = Game(nextLong.hexString)
+  def init: Game = Game(nextLong.hexString, snaps = List(GameSnap.empty), round = 0)
 
   def rand: Game = {
     val snap = GameSnap.gen()
     val logs = GameLog.fresh(snap)
-    Game(nextLong.hexString, 0, List(snap), logs, Nil)
+    val pending = logs.on.headOption.map {
+      case Rook(_, firstAt, _, _)   => RookAdded(firstAt.at)
+      case Bishop(_, firstAt, _, _) => BishopAdded(firstAt.at)
+    }.toList
+    Game(nextLong.hexString, round = 1, snaps = List(snap), logs = logs, pending = pending)
   }
 
   implicit class GameOps(game: Game) {
@@ -38,7 +43,8 @@ object Game {
 
     private def boardInfo: String = BoardRender.asGameBoard(game.snap)
 
-    private def gameRound: String = s"GameId: ${game.id} round: ${game.round}"
+    // we print after move, prev round, but it's next round waiting for move, so one too much
+    private def gameRound: String = s"GameId: ${game.id} round: ${game.round - 1}"
 
     def applyAddRook(xy: (Int, Int)): Either[String, Game] = game.snap
       .addRook(xy)

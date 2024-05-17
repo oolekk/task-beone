@@ -7,39 +7,40 @@ case class GameLog(on: List[LogEntry], off: List[LogEntry], lastId: Int = 0)
 
 object GameLog {
 
-  private val NO_SUCH_ID_ON_BOARD_MSG  = "No such ID for any piece on the board!"
+  private val NO_SUCH_ID_ON_BOARD_MSG = "No such ID for any piece on the board!"
 
   val empty: GameLog = GameLog(Nil, Nil)
 
   def fresh(snap: GameSnap): GameLog = {
     import util.LongBitOps._
+    val all = snap.allPieces.find1s
     GameLog(
-      snap.allPieces.find1s.zipWithIndex.map { case (at, idx) =>
+      on = all.zipWithIndex.map { case (at, idx) =>
         val rxy = RoundXY(0, at)
         if (snap.rooks.getBool(at)) Rook(idx + 1, rxy, rxy, List(at))
         else Bishop(idx + 1, rxy, rxy, List(at))
       },
-      Nil
+      off = Nil,
+      lastId = all.size
     )
   }
 
   implicit class GameLogOps(gameLog: GameLog) {
 
     def applyAddRook(round: Int, xy: (Int, Int)): GameLog = {
-      val rat  = RoundXY(round, xy)
-      val rook = Rook(gameLog.lastId + 1, rat, rat, List(xy))
+      val rxy  = RoundXY(round, xy)
+      val rook = Rook(gameLog.lastId + 1, rxy, rxy, List(xy))
       applyAddPiece(rook)
     }
 
     def applyAddBishop(round: Int, xy: (Int, Int)): GameLog = {
-      val rat  = RoundXY(round, xy)
-      val bishop = Bishop(gameLog.lastId + 1, rat, rat, List(xy))
+      val rxy    = RoundXY(round, xy)
+      val bishop = Bishop(gameLog.lastId + 1, rxy, rxy, List(xy))
       applyAddPiece(bishop)
     }
 
     private def applyAddPiece(entry: LogEntry): GameLog =
       gameLog.copy(on = entry :: gameLog.on, lastId = entry.id)
-
 
     def applyMovePiece(round: Int, xyOld: (Int, Int), xyNew: (Int, Int)): GameLog = {
       val logIdx            = gameLog.on.indexWhere(_.lastAt.at == rawIndex(xyOld))
@@ -48,7 +49,7 @@ object GameLog {
     }
 
     def applyTakePiece(round: Int, xy: (Int, Int)): GameLog = {
-      val logIdx = gameLog.on.indexWhere(_.lastAt.at == rawIndex(xy))
+      val logIdx            = gameLog.on.indexWhere(_.lastAt.at == rawIndex(xy))
       val (pre, log :: aft) = gameLog.on.splitAt(logIdx)
       gameLog.copy(on = pre ::: aft, off = log.taken(round) :: gameLog.off)
     }

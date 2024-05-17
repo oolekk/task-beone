@@ -69,7 +69,7 @@ object CmdParser {
       Either.cond(
         digits.forall(d => d >= min && d <= max),
         digits.toList,
-        Error.NO_SUCH_FIELD_MSG
+        Error.NO_SUCH_XY_MSG
       )
   }
 

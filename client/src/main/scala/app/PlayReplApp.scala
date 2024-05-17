@@ -6,15 +6,17 @@ import util.{CmdParser, HttpUtil}
 import zio.Console._
 import zio._
 
-object GameApp extends ZIOAppDefault {
+object PlayReplApp extends ZIOAppDefault {
 
   def run: ZIO[ZIOAppArgs & Scope, Throwable, Unit] = replInit(Game.init)
 
+  private val PROMPT                 = ">"
+  private val COMMAND_PROMPT_WELCOME = "TYPE COMMANDS AFTER PROMPT"
+  private def saveNotAcceptedMsg(storedCount: Int) =
+    s"Save not accepted, total saved count stays at: ${storedCount.abs}"
+
   private def replInit(game: Game): ZIO[ZIOAppArgs & Scope, Throwable, Unit] =
-    for {
-      _ <- print(s"$COMMAND_PROMPT_WELCOME\n$PROMPT")
-      _ <- repl(game)
-    } yield ()
+    print(s"$COMMAND_PROMPT_WELCOME\n$PROMPT") *> repl(game).unit
 
   private def repl(game: Game): ZIO[ZIOAppArgs & Scope, Throwable, Unit] = {
     for {
@@ -25,7 +27,14 @@ object GameApp extends ZIOAppDefault {
           cmd <- ZIO.fromEither(cmdOpt).tapError(err => printLine(err)) orElse ZIO.succeed(Noop)
           next <- TextCmd
             .applyCommand(cmd, game)
-            .foldZIO(err => printLine(err).as(game), next => savedOrSame(next))
+            .foldZIO(
+              err => printLine(err).as(game),
+              next =>
+                cmd match {
+                  case Rand => ZIO.succeed(next)
+                  case _    => saveOrFallback(next)
+                }
+            )
           _ <- cmd match {
             case Load(_)       => printLine(next.loadInfo)
             case GameInfo      => printLine(next.descAllInfo)
@@ -39,14 +48,11 @@ object GameApp extends ZIOAppDefault {
     } yield ()
   }
 
-  private def savedOrSame(game: Game): URIO[ZIOAppArgs & Scope, Game] = HttpUtil
+  private def saveOrFallback(game: Game): URIO[ZIOAppArgs & Scope, Game] = HttpUtil
     .push(game)
-    .flatMap(diffCount =>
-      if (diffCount < 0) {
-        ZIO.fail(s"Change not accepted, ${-diffCount} items discarded!")
-      } else {
-        ZIO.succeed(game.copy(pending = Nil))
-      }
+    .flatMap(storedCount =>
+      if (storedCount < 0) ZIO.fail(saveNotAcceptedMsg(storedCount))
+      else ZIO.succeed(game.copy(pending = Nil))
     )
     .tapError(err => printLine(err))
     .orElseSucceed(game)
