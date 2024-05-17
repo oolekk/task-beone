@@ -26,7 +26,7 @@ All the numeric X Y args don't need to be separated by spaces, but can be.
 Since it's always numbers below 10 which are valid for X Y, each single one is 
 treated as such.
 
-`b 11` will add rook on field (1, 1) `add rook` `new rook` `put rook` does the same
+`r 11` will add rook on field (1, 1) `add rook` `new rook` `put rook` does the same
 
 `b 11` will add bishop on field (1, 1) `add bishop` `new bishop` `put bishop` does the same
 
@@ -40,7 +40,9 @@ treated as such.
 
 `rand` will randomly populate the board for a quck-start expereience
 
-`exit` will exit the repl, so it's the cleanest way to restart with new game
+`exit` will exit the repl
+
+`restart` will start new repl with new empty game
 
 `load` will load last saved state from the server, must be followed by gameId, which is printed
 above the board  after each move, or after no-op, such as just pressing enter.
@@ -49,11 +51,9 @@ Each time there is a move, saving is attempted, but if it fails (server can be t
 game continues unhindered, only informs that save did not succeed. On each move, all un-saved actions
 are again pushed to server, and game will be in-sync on first reconnect. All events will be emitted.
 
-To start another new game, best to `exit` the `PlayReplApp` although we can switch to
-different game by runnig `load`, and non-existend id will effectively create new game.
+We can switch to some previous game by running `load`.
 Normally, when game is started, random game-id is assigned. We can also switch to a
-random game by running `rand`. Such switching should work, but I didn't test it
-much, so if there is any problems, best to restart the `PlayReplApp`
+random game by running `rand`.
 
 There is variants of commands which work with rook or bishop id, as it was requested in the task
 description. The id is simply the sequence number, each next piece has the next id, starting with 1.

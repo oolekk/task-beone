@@ -21,31 +21,38 @@ object PlayReplApp extends ZIOAppDefault {
   private def repl(game: Game): ZIO[ZIOAppArgs & Scope, Throwable, Unit] = {
     for {
       cmdOpt <- readLine.map(line => CmdParser.parse(line, game))
-      _ <- ZIO.unless(cmdOpt.contains(TextCmd.Exit)) {
-        for {
-          _   <- print(cmdOpt.map(_.toString + "\n").getOrElse(""))
-          cmd <- ZIO.fromEither(cmdOpt).tapError(err => printLine(err)) orElse ZIO.succeed(Noop)
-          next <- TextCmd
-            .applyCommand(cmd, game)
-            .foldZIO(
-              err => printLine(err).as(game),
-              next =>
-                cmd match {
-                  case Rand => ZIO.succeed(next)
-                  case _    => saveOrFallback(next)
-                }
-            )
-          _ <- cmd match {
-            case Load(_)       => printLine(next.loadInfo)
-            case GameInfo      => printLine(next.descAllInfo)
-            case PieceInfo(id) => printLine(next.descOneInfo(id))
-            case _             => printLine(next.noopInfo)
+      _ <-
+        if (cmdOpt == Right(Restart)) replInit(Game.init)
+        else
+          ZIO.unless(cmdOpt.contains(TextCmd.Exit)) {
+            for {
+              _    <- print(cmdOpt.map(_.toString + "\n").getOrElse(""))
+              cmd  <- ZIO.fromEither(cmdOpt).tapError(err => printLine(err)) orElse ZIO.succeed(Noop)
+              next <- savedSameOrRandGame(game, cmd)
+              _ <- cmd match {
+                case Load(_)       => printLine(next.loadInfo)
+                case GameInfo      => printLine(next.descAllInfo)
+                case PieceInfo(id) => printLine(next.descOneInfo(id))
+                case _             => printLine(next.noopInfo)
+              }
+              _ <- print(PROMPT)
+              _ <- repl(next)
+            } yield ()
           }
-          _ <- print(PROMPT)
-          _ <- repl(next)
-        } yield ()
-      }
     } yield ()
+  }
+
+  private def savedSameOrRandGame(game: Game, cmd: TextCmd) = {
+    TextCmd
+      .applyCommand(cmd, game)
+      .foldZIO(
+        err => printLine(err).as(game),
+        next =>
+          cmd match {
+            case Rand => ZIO.succeed(next)
+            case _    => saveOrFallback(next)
+          }
+      )
   }
 
   private def saveOrFallback(game: Game): URIO[ZIOAppArgs & Scope, Game] = HttpUtil

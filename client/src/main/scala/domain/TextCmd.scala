@@ -12,6 +12,7 @@ object TextCmd {
   case object Exit                     extends TextCmd
   case object Noop                     extends TextCmd
   case object Rand                     extends TextCmd
+  case object Restart                  extends TextCmd
   case object GameInfo                 extends TextCmd
   case class PieceInfo(id: Int)        extends TextCmd
   case class Load(gameId: String = "") extends TextCmd
@@ -27,8 +28,8 @@ object TextCmd {
       HttpUtil.load(gameId).flatMap { snaps =>
         ZIO.fromEither(replay(gameId, snaps).map(_.copy(pending = Nil)))
       }
-    case Rand => ZIO.fromEither(Right(Game.rand))
-    case _    => ZIO.fromEither(Right(game))
+    case Rand    => ZIO.fromEither(Right(Game.rand))
+    case _       => ZIO.fromEither(Right(game))
   }
 
   private def applyUpdate(cmd: Update, game: Game): Either[String, Game] = cmd match {

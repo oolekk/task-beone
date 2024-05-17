@@ -9,16 +9,17 @@ object CmdParser {
   private val INVALID_COMMAND_MSG      = "Invalid command!"
   private val WRONG_ARGUMENT_COUNT_MSG = "Wrong argument count!"
 
-  private val EXIT_TXT = "exit"
-  private val INFO_TXT = "info"
-  private val RAND_TXT = "rand"
-  private val LOAD_TXT = "load"
+  private val EXIT_TXT    = "exit"
+  private val INFO_TXT    = "info"
+  private val RAND_TXT    = "rand"
+  private val LOAD_TXT    = "load"
   def parse(text: String, game: Game): Either[String, TextCmd] = {
     text.takeWhile(!_.isWhitespace).toLowerCase.trim match {
       case _ if text.isBlank                => Right(Noop)
       case num if num.toIntOption.isDefined => byIdCmd(game, text)
       case EXIT_TXT                         => Right(Exit)
       case RAND_TXT                         => Right(Rand)
+      case "restart" | "reset"              => Right(Restart)
       case LOAD_TXT                         => Right(Load(text.drop(4).trim))
       case txt if isNewRookTxt(txt) =>
         parseXY(text, 2).map { case List(x, y) => AddRook(x, y) }
