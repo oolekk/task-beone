@@ -4,6 +4,7 @@ import util.LongBitOps._
 import zio.ZIO
 import zio.json._
 
+import scala.annotation.tailrec
 import scala.util.Random
 
 case class GameSnap private (rs: Long, bs: Long) {
@@ -70,6 +71,7 @@ object GameSnap {
     else ZIO.succeed(new GameSnap(rooks, bishops))
   }
 
+  @tailrec
   def gen(): GameSnap = {
     val bs = Random.nextLong()
     val rs = Random.nextLong()
