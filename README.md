@@ -12,23 +12,23 @@ Redis DB will also be started, all is default, no further configuration needed t
 Each 5 seconds the in-memory backlog is pushed to persistent storage.
 
 Once docker compose is started, we can also start the separate kafka client.
-`ConsumerApp` can be ran in separate tab, and will print board action events
+`ConsumerApp` can be run in separate tab, and will print board action events
 as they are published by the producer. No special configuration was done to resume from
 last offset, it will not replay previously missed events but those which occur while it
 is running will be displayed.
 
 `PlayReplApp` will accept commands via terminal to add pieces on board and to move them around.
-There's more full worded commands which can be readily inspected in the `ComandParser`
-I will quickly list the short versions which I used during testing. Location or Id can
+There's more full worded commands which can be readily inspected in the `CmdParser`
+I will quickly list the short versions which I used during testing. Location or ID can
 be used to indicate which piece should be acted on.
 
 All the numeric X Y args don't need to be separated by spaces, but can be.
-Since it's always numbers below 10 which are valid for X Y, each single one is 
-treated as such.
+Since it's always one digit numbers, 0-7 which are valid for X Y, each single digit is 
+treated as separate coordinate.
 
-`r 11` will add rook on field (1, 1) `add rook` `new rook` `put rook` does the same
+`r 01` will add rook on field (0, 1) `add rook` `new rook` `put rook` does the same
 
-`b 11` will add bishop on field (1, 1) `add bishop` `new bishop` `put bishop` does the same
+`b 10` will add bishop on field (1, 0) `add bishop` `new bishop` `put bishop` does the same
 
 `rm 11` will remove any piece on that field, `take`, `rmv`, `remove`, `delete` works the same
 
@@ -36,9 +36,9 @@ treated as such.
 
 `info` will print info and in-depth stats about all the pieces on and off the board
 
-`mv 11 22` will attepmt to move piece from (1,1) to (2,2) it is validated both locally and remotely
+`mv 11 22` will attempt to move piece from (1,1) to (2,2) it is validated both locally and remotely
 
-`rand` will randomly populate the board for a quck-start expereience
+`rand` will randomly populate the board for a quick-start experience
 
 `exit` will exit the repl
 
@@ -79,9 +79,10 @@ the last stored board state on the server. Using lua script with redis it is don
 in single trip. Situation is always clear without need for back-and-forth between client and the
 server. Only upon successful persistence events will be emitted by kafka producer.
 
-There is just 3 endpoints. One is for loading saved state, one for incremental or bulk state
-changes, it supports resuming where several actions are accepted at once, all are still 
-validated. The API can be inspected in swagger under `http://localhost:8090/docs/`
+There is just 3 endpoints. One for status, another for loading saved state, one more for
+accepting incremental or bulk state changes - it supports resuming, where several actions
+are accepted at once, all are still  validated.
+The API can be inspected in swagger under `http://localhost:8090/docs/`
 
 There is good test coverage for important logical parts, pertaining to move logic and
 numeric representation of the board, as well as its serialization. For sure there could
